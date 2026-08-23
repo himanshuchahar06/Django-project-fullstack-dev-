@@ -29,6 +29,7 @@ DEBUG = True
 ALLOWED_HOSTS = ['.vercel.app']
 
 
+
 # Application definition
 
 INSTALLED_APPS = [
@@ -89,8 +90,7 @@ DATABASES = {
         'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
-DATABASES['default'] = dj_database_url.parse('postgresql://django_bookmyshow_user:uF7eu2GnnDbqvUgYswCYpIS5TKTtsAUS@dpg-cshi84o8fa8c739dsme0-a.oregon-postgres.render.com/django_bookmyshow')
-# 
+DATABASES['default']=dj_database_url.parse('postgresql://djnago_bookmyshow_35v7_user:QK20xv9zpiUWLREfpCQ6khmt6AFaOlcU@dpg-da5ltqijobas73f5fla0-a.oregon-postgres.render.com/djnago_bookmyshow_35v7')
 
 # Password validation
 # https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators
@@ -132,3 +132,13 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+# .\venv\Scripts\activate
+# python --version
+# python -m django --version
+# python manage.py migrate
+# python manage.py runserver
+# .\venv\Scripts\activate
+# python --version
+# python -m django --version
+# python manage.py migrate
+# python manage.py runserver
