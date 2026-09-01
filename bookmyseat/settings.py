@@ -89,16 +89,22 @@ TEMPLATES = [
 WSGI_APPLICATION = 'bookmyseat.wsgi.application'
 
 
-# Database
-# https://docs.djangoproject.com/en/5.1/ref/settings/#databases
-
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
-DATABASES['default']=dj_database_url.parse('postgresql://djnago_bookmyshow_35v7_user:QK20xv9zpiUWLREfpCQ6khmt6AFaOlcU@dpg-da5ltqijobas73f5fla0-a.oregon-postgres.render.com/djnago_bookmyshow_35v7')
+
+try:
+    import dj_database_url
+    db_env = os.environ.get('DATABASE_URL')
+    if db_env:
+        DATABASES['default'] = dj_database_url.parse(db_env)
+    elif os.environ.get('USE_POSTGRES', 'False') == 'True':
+        DATABASES['default'] = dj_database_url.parse('postgresql://djnago_bookmyshow_35v7_user:QK20xv9zpiUWLREfpCQ6khmt6AFaOlcU@dpg-da5ltqijobas73f5fla0-a.oregon-postgres.render.com/djnago_bookmyshow_35v7')
+except Exception:
+    pass
 
 # Password validation
 # https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators

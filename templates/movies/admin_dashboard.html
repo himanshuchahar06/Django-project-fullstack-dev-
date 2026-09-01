@@ -1,0 +1,266 @@
+{% extends "users/basic.html" %}
+{% block title %}Custom Admin Dashboard | BookMySeat{% endblock %}
+
+{% block content %}
+<style>
+  body { background-color: #0f172a; color: #f8fafc; }
+  .admin-card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 24px; margin-bottom: 24px; }
+  .nav-pills .nav-link { color: #cbd5e1; border-radius: 8px; font-weight: 600; padding: 10px 20px; }
+  .nav-pills .nav-link.active { background: linear-gradient(135deg, #0284c7, #2563eb); color: white; }
+  .table-dark-custom { background: #1e293b; color: #f8fafc; border-color: #334155; }
+  .table-dark-custom th { border-color: #334155; background: #0f172a; }
+  .table-dark-custom td { border-color: #334155; vertical-align: middle; }
+</style>
+
+<div class="container mt-4">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="font-weight-bold text-white mb-0"><i class="fas fa-user-shield text-info mr-2"></i>Cinema Admin Dashboard</h2>
+    <a href="/admin/" class="btn btn-outline-light font-weight-bold" target="_blank">
+      <i class="fas fa-cog mr-1"></i>Open Full Django Admin
+    </a>
+  </div>
+
+  {% if messages %}
+    {% for message in messages %}
+      <div class="alert alert-{% if message.tags == 'error' %}danger{% else %}{{ message.tags }}{% endif %} alert-dismissible fade show">
+        {{ message }}
+        <button type="button" class="close text-white" data-dismiss="alert"><span>&times;</span></button>
+      </div>
+    {% endfor %}
+  {% endif %}
+
+  <!-- Tab Navigation -->
+  <ul class="nav nav-pills mb-4" id="adminTabs" role="tablist">
+    <li class="nav-item">
+      <a class="nav-link {% if active_tab == 'movies' %}active{% endif %}" href="?tab=movies"><i class="fas fa-film mr-2"></i>Movies ({{ movies.count }})</a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link {% if active_tab == 'genres' %}active{% endif %}" href="?tab=genres"><i class="fas fa-tags mr-2"></i>Genres ({{ genres.count }})</a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link {% if active_tab == 'languages' %}active{% endif %}" href="?tab=languages"><i class="fas fa-language mr-2"></i>Languages ({{ languages.count }})</a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link {% if active_tab == 'cast' %}active{% endif %}" href="?tab=cast"><i class="fas fa-users mr-2"></i>Cast & Crew ({{ cast_members.count }})</a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link {% if active_tab == 'theaters' %}active{% endif %}" href="?tab=theaters"><i class="fas fa-building mr-2"></i>Theaters ({{ theaters.count }})</a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link {% if active_tab == 'reports' %}active{% endif %}" href="?tab=reports"><i class="fas fa-flag text-warning mr-2"></i>Reports ({{ reports.count }})</a>
+    </li>
+  </ul>
+
+  <!-- Tab Contents -->
+  <div class="tab-content">
+    
+    <!-- MOVIES TAB -->
+    {% if active_tab == 'movies' %}
+      <div class="admin-card">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h4 class="font-weight-bold text-white mb-0">Movie Directory</h4>
+          <button class="btn btn-primary font-weight-bold" data-toggle="modal" data-target="#addMovieModal">
+            <i class="fas fa-plus mr-1"></i>Add New Movie
+          </button>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-dark-custom table-hover">
+            <thead>
+              <tr>
+                <th>Poster</th><th>Title</th><th>Age Cert</th><th>Duration</th><th>Rating</th><th>Trending</th><th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for m in movies %}
+                <tr>
+                  <td>
+                    {% if m.image %}<img src="{{ m.image.url }}" style="height: 50px; width: 40px; object-fit: cover;" class="rounded">{% endif %}
+                  </td>
+                  <td class="font-weight-bold text-white">{{ m.name }}</td>
+                  <td><span class="badge badge-secondary">{{ m.age_certification }}</span></td>
+                  <td>{{ m.duration_formatted }}</td>
+                  <td><i class="fas fa-star text-warning mr-1"></i>{{ m.rating }}</td>
+                  <td>{% if m.is_trending %}<span class="badge badge-warning text-dark">Trending</span>{% else %}No{% endif %}</td>
+                  <td>
+                    <a href="{% url 'movie_detail' m.id %}" class="btn btn-sm btn-info" target="_blank"><i class="fas fa-eye"></i> View</a>
+                  </td>
+                </tr>
+              {% empty %}
+                <tr><td colspan="7" class="text-center text-muted">No movies added yet.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    {% endif %}
+
+    <!-- GENRES TAB -->
+    {% if active_tab == 'genres' %}
+      <div class="admin-card">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h4 class="font-weight-bold text-white mb-0">Movie Genres</h4>
+          <button class="btn btn-primary font-weight-bold" data-toggle="modal" data-target="#addGenreModal">
+            <i class="fas fa-plus mr-1"></i>Add Genre
+          </button>
+        </div>
+        <ul class="list-group list-group-flush bg-transparent">
+          {% for g in genres %}
+            <li class="list-group-item bg-dark text-white border-secondary d-flex justify-content-between align-items-center">
+              <span><i class="fas fa-tag text-info mr-2"></i>{{ g.name }}</span>
+              <span class="badge badge-primary badge-pill">{{ g.movies.count }} movies</span>
+            </li>
+          {% empty %}
+            <li class="list-group-item bg-dark text-muted">No genres configured yet.</li>
+          {% endfor %}
+        </ul>
+      </div>
+    {% endif %}
+
+    <!-- LANGUAGES TAB -->
+    {% if active_tab == 'languages' %}
+      <div class="admin-card">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h4 class="font-weight-bold text-white mb-0">Languages</h4>
+          <button class="btn btn-primary font-weight-bold" data-toggle="modal" data-target="#addLanguageModal">
+            <i class="fas fa-plus mr-1"></i>Add Language
+          </button>
+        </div>
+        <ul class="list-group list-group-flush bg-transparent">
+          {% for l in languages %}
+            <li class="list-group-item bg-dark text-white border-secondary d-flex justify-content-between align-items-center">
+              <span><i class="fas fa-globe text-success mr-2"></i>{{ l.name }} {% if l.code %}({{ l.code }}){% endif %}</span>
+              <span class="badge badge-info badge-pill">{{ l.movies.count }} movies</span>
+            </li>
+          {% empty %}
+            <li class="list-group-item bg-dark text-muted">No languages configured yet.</li>
+          {% endfor %}
+        </ul>
+      </div>
+    {% endif %}
+
+    <!-- CAST TAB -->
+    {% if active_tab == 'cast' %}
+      <div class="admin-card">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h4 class="font-weight-bold text-white mb-0">Cast & Crew Members</h4>
+          <button class="btn btn-primary font-weight-bold" data-toggle="modal" data-target="#addCastModal">
+            <i class="fas fa-plus mr-1"></i>Add Cast Member
+          </button>
+        </div>
+        <div class="row">
+          {% for c in cast_members %}
+            <div class="col-md-3 col-6 mb-3">
+              <div class="p-3 bg-dark border border-secondary rounded text-center">
+                <h6 class="font-weight-bold text-white mb-1">{{ c.name }}</h6>
+                <span class="badge badge-info mb-2">{{ c.role }}</span>
+                {% if c.bio %}<p class="small text-slate-400 mb-0 text-truncate">{{ c.bio }}</p>{% endif %}
+              </div>
+            </div>
+          {% empty %}
+            <div class="col-12"><p class="text-muted">No cast members added yet.</p></div>
+          {% endfor %}
+        </div>
+      </div>
+    {% endif %}
+
+    <!-- THEATERS TAB -->
+    {% if active_tab == 'theaters' %}
+      <div class="admin-card">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h4 class="font-weight-bold text-white mb-0">Theaters & Show Schedules</h4>
+          <button class="btn btn-primary font-weight-bold" data-toggle="modal" data-target="#addTheaterModal">
+            <i class="fas fa-plus mr-1"></i>Add Show Schedule
+          </button>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-dark-custom">
+            <thead>
+              <tr><th>Theater Name</th><th>Location</th><th>Movie</th><th>Showtime</th><th>Price</th></tr>
+            </thead>
+            <tbody>
+              {% for t in theaters %}
+                <tr>
+                  <td class="font-weight-bold text-white">{{ t.name }}</td>
+                  <td>{{ t.location|default:"N/A" }}</td>
+                  <td>{{ t.movie.name }}</td>
+                  <td>{{ t.time|date:"Y-m-d H:i" }}</td>
+                  <td class="text-success font-weight-bold">₹{{ t.ticket_price }}</td>
+                </tr>
+              {% empty %}
+                <tr><td colspan="5" class="text-center text-muted">No theaters scheduled yet.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    {% endif %}
+
+    <!-- REPORTS TAB -->
+    {% if active_tab == 'reports' %}
+      <div class="admin-card">
+        <h4 class="font-weight-bold text-white mb-3"><i class="fas fa-flag text-warning mr-2"></i>Reported Inappropriate Reviews</h4>
+        {% for r in reports %}
+          <div class="p-3 bg-dark border border-secondary rounded mb-3">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <span class="text-warning font-weight-bold"><i class="fas fa-user-ninja mr-1"></i>Reported by: {{ r.reported_by.username }}</span>
+              <span class="text-muted small">{{ r.created_at|date:"M d, Y H:i" }}</span>
+            </div>
+            <p class="text-danger mb-2"><strong>Reason:</strong> {{ r.reason }}</p>
+            <div class="bg-slate-800 p-2 rounded text-slate-300 small">
+              <strong>Target Review (Movie: {{ r.review.movie.name }}, Author: {{ r.review.user.username }}):</strong>
+              <br>"{{ r.review.comment }}"
+            </div>
+            <div class="mt-2 text-right">
+              <a href="{% url 'delete_review' r.review.id %}" class="btn btn-sm btn-danger" onclick="return confirm('Delete this review?');"><i class="fas fa-trash-alt mr-1"></i>Delete Target Review</a>
+            </div>
+          </div>
+        {% empty %}
+          <p class="text-muted">No review reports submitted.</p>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+  </div>
+</div>
+
+<!-- Modal Forms -->
+<div class="modal fade" id="addMovieModal" tabindex="-1"><div class="modal-dialog modal-lg modal-dialog-centered"><div class="modal-content">
+  <div class="modal-header border-secondary"><h5 class="modal-title">Add Movie</h5><button type="button" class="close text-white" data-dismiss="modal"><span>&times;</span></button></div>
+  <form method="POST" enctype="multipart/form-data"><input type="hidden" name="action" value="add_movie">{% csrf_token %}
+    <div class="modal-body">{{ movie_form.as_p }}</div>
+    <div class="modal-footer border-secondary"><button type="submit" class="btn btn-primary">Save Movie</button></div>
+  </form>
+</div></div></div>
+
+<div class="modal fade" id="addGenreModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+  <div class="modal-header border-secondary"><h5 class="modal-title">Add Genre</h5><button type="button" class="close text-white" data-dismiss="modal"><span>&times;</span></button></div>
+  <form method="POST"><input type="hidden" name="action" value="add_genre">{% csrf_token %}
+    <div class="modal-body">{{ genre_form.as_p }}</div>
+    <div class="modal-footer border-secondary"><button type="submit" class="btn btn-primary">Save Genre</button></div>
+  </form>
+</div></div></div>
+
+<div class="modal fade" id="addLanguageModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+  <div class="modal-header border-secondary"><h5 class="modal-title">Add Language</h5><button type="button" class="close text-white" data-dismiss="modal"><span>&times;</span></button></div>
+  <form method="POST"><input type="hidden" name="action" value="add_language">{% csrf_token %}
+    <div class="modal-body">{{ language_form.as_p }}</div>
+    <div class="modal-footer border-secondary"><button type="submit" class="btn btn-primary">Save Language</button></div>
+  </form>
+</div></div></div>
+
+<div class="modal fade" id="addCastModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+  <div class="modal-header border-secondary"><h5 class="modal-title">Add Cast Member</h5><button type="button" class="close text-white" data-dismiss="modal"><span>&times;</span></button></div>
+  <form method="POST" enctype="multipart/form-data"><input type="hidden" name="action" value="add_cast">{% csrf_token %}
+    <div class="modal-body">{{ cast_form.as_p }}</div>
+    <div class="modal-footer border-secondary"><button type="submit" class="btn btn-primary">Save Cast Member</button></div>
+  </form>
+</div></div></div>
+
+<div class="modal fade" id="addTheaterModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+  <div class="modal-header border-secondary"><h5 class="modal-title">Add Theater Schedule</h5><button type="button" class="close text-white" data-dismiss="modal"><span>&times;</span></button></div>
+  <form method="POST"><input type="hidden" name="action" value="add_theater">{% csrf_token %}
+    <div class="modal-body">{{ theater_form.as_p }}</div>
+    <div class="modal-footer border-secondary"><button type="submit" class="btn btn-primary">Save Theater Schedule</button></div>
+  </form>
+</div></div></div>
+{% endblock %}
