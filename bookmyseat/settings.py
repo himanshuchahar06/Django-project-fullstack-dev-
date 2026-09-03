@@ -27,10 +27,13 @@ DEBUG = True
 ALLOWED_HOSTS = [
     'django-project-fullstack-dev.vercel.app',
     'django-project-fullstack-dev-ws4u.vercel.app',
+
+    # Allow Vercel deployment URLs
+    '.vercel.app',
+
     '127.0.0.1',
     'localhost',
 ]
-
 CSRF_TRUSTED_ORIGINS = [
     'https://django-project-fullstack-dev.vercel.app',
     'https://django-project-fullstack-dev-ws4u.vercel.app',
