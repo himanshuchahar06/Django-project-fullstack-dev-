@@ -137,30 +137,25 @@ WSGI_APPLICATION = 'bookmyseat.wsgi.application'
 # DATABASE
 # --------------------------------------------------
 
-# LOCAL:
-#     SQLite → db.sqlite3
-#
-# VERCEL:
-#     PostgreSQL → DATABASE_URL
+# --------------------------------------------------
+# DATABASE
+# --------------------------------------------------
 
-if os.environ.get('DATABASE_URL'):
-
-    DATABASES = {
-        'default': dj_database_url.parse(
-            os.environ.get('DATABASE_URL'),
-            conn_max_age=600,
-            ssl_require=True
-        )
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
     }
+}
 
-else:
-
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db.sqlite3',
-        }
-    }
+try:
+    import dj_database_url
+    postgres_url = 'postgresql://djnago_bookmyshow_35v7_user:QK20xv9zpiUWLREfpCQ6khmt6AFaOlcU@dpg-da5ltqijobas73f5fla0-a.oregon-postgres.render.com/djnago_bookmyshow_35v7'
+    db_env = os.environ.get('DATABASE_URL') or os.environ.get('POSTGRES_URL') or (postgres_url if os.environ.get('VERCEL') or os.environ.get('USE_POSTGRES') else None)
+    if db_env:
+        DATABASES['default'] = dj_database_url.parse(db_env, conn_max_age=600)
+except Exception as e:
+    pass
 
 
 # --------------------------------------------------
