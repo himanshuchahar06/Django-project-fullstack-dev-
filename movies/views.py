@@ -61,17 +61,17 @@ def movie_detail(request, movie_id):
     reviews = movie.reviews.all()
     total_reviews = reviews.count()
     
-    # Rating breakdown (count of 5-star, 4-star, etc.)
-    rating_counts = {i: 0 for i in range(1, 6)}
+    # Rating breakdown (count of 10-star, 9-star, etc.)
+    rating_counts = {i: 0 for i in range(1, 11)}
     for r in reviews:
         rating_counts[r.rating] = rating_counts.get(r.rating, 0) + 1
     
     rating_percentages = {}
     if total_reviews > 0:
-        for i in range(1, 6):
+        for i in range(1, 11):
             rating_percentages[i] = int((rating_counts[i] / total_reviews) * 100)
     else:
-        for i in range(1, 6):
+        for i in range(1, 11):
             rating_percentages[i] = 0
 
     # Recommendations

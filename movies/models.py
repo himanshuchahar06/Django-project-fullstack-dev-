@@ -47,7 +47,7 @@ AGE_CERTIFICATION_CHOICES = [
 class Movie(models.Model):
     name = models.CharField(max_length=255)
     image = models.ImageField(upload_to="movies/")
-    rating = models.DecimalField(max_digits=3, decimal_places=1, default=0.0)
+    rating = models.DecimalField(max_digits=4, decimal_places=1, default=0.0)
     cast = models.TextField(blank=True, null=True, help_text="Legacy cast summary text")
     description = models.TextField(blank=True, null=True)
     duration_minutes = models.PositiveIntegerField(default=120, help_text="Duration in minutes")
@@ -139,7 +139,7 @@ class Booking(models.Model):
 class Review(models.Model):
     movie = models.ForeignKey(Movie, on_delete=models.CASCADE, related_name='reviews')
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='movie_reviews')
-    rating = models.PositiveIntegerField(choices=[(i, f"{i} Stars") for i in range(1, 6)])
+    rating = models.PositiveIntegerField(choices=[(i, f"{i}/10 Stars") for i in range(1, 11)])
     comment = models.TextField()
     is_verified_viewer = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)

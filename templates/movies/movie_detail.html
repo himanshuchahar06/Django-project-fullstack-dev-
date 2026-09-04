@@ -212,7 +212,7 @@
           <div class="d-flex align-items-center mr-4">
             <i class="fas fa-star star-gold fa-lg mr-2"></i>
             <span class="h4 font-weight-bold text-white mb-0">{{ movie.rating }}</span>
-            <span class="text-muted ml-1">/ 5.0 ({{ total_reviews }} reviews)</span>
+            <span class="text-muted ml-1">/ 10.0 ({{ total_reviews }} reviews)</span>
           </div>
         </div>
 
@@ -315,7 +315,7 @@
         <h4 class="font-weight-bold text-white mb-3">Audience Rating</h4>
         <div class="text-center my-3">
           <span class="display-3 font-weight-bold text-warning">{{ movie.rating }}</span>
-          <span class="h4 text-muted">/ 5</span>
+          <span class="h4 text-muted">/ 10</span>
           <div class="my-2">
             {% for i in "12345" %}
               {% if forloop.counter <= movie.rating %}

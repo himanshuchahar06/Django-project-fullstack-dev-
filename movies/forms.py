@@ -3,9 +3,9 @@ from .models import Movie, Review, ReviewReport, Genre, Language, CastMember, Th
 
 class ReviewForm(forms.ModelForm):
     rating = forms.ChoiceField(
-        choices=[(i, f"{i} Stars") for i in range(5, 0, -1)],
-        widget=forms.RadioSelect(attrs={'class': 'star-rating-input'}),
-        initial=5
+        choices=[(i, f"{i}/10 Stars") for i in range(10, 0, -1)],
+        widget=forms.Select(attrs={'class': 'form-control bg-dark text-warning border-secondary font-weight-bold'}),
+        initial=10
     )
     comment = forms.CharField(
         widget=forms.Textarea(attrs={
