@@ -3,7 +3,7 @@ from datetime import timedelta
 from django.test import TestCase, Client
 from django.contrib.auth.models import User
 from django.utils import timezone
-from movies.models import Movie, Theater, Seat, Booking
+from movies.models import Movie, Theater, Seat, Booking, PaymentTransaction
 
 class SmartSeatReservationTestCase(TestCase):
     def setUp(self):
@@ -126,24 +126,127 @@ class SmartSeatReservationTestCase(TestCase):
         self.assertEqual(self.seat2.reserved_by, self.user1)
         self.assertEqual(self.seat3.reserved_by, self.user1)
 
-    def test_confirm_booking_success(self):
-        """User 1 reserves A1 and confirms booking, turning seat to booked status."""
+    def test_create_payment_order_and_verify_success(self):
+        """Test complete payment order creation and server-side verification."""
+        # Step 1: Reserve seat A1
         self.client_user1.post(
             f'/movies/theater/{self.theater.id}/reserve-seats/',
             data=json.dumps({'seat_ids': [self.seat1.id]}),
             content_type='application/json'
         )
 
-        # Confirm booking
-        res = self.client_user1.post(
-            f'/movies/theater/{self.theater.id}/confirm-booking/',
+        # Step 2: Create payment order
+        res_order = self.client_user1.post(
+            f'/movies/theater/{self.theater.id}/payment/create-order/',
             data=json.dumps({'seat_ids': [self.seat1.id]}),
             content_type='application/json'
         )
-        self.assertEqual(res.status_code, 200)
-        self.assertTrue(res.json()['success'])
+        self.assertEqual(res_order.status_code, 200)
+        order_data = res_order.json()
+        self.assertTrue(order_data['success'])
+        order_id = order_data['order_id']
+        self.assertEqual(order_data['amount'], 300.0)
+
+        # Verify PaymentTransaction in database
+        txn = PaymentTransaction.objects.get(order_id=order_id)
+        self.assertEqual(txn.status, 'PENDING')
+        self.assertEqual(txn.user, self.user1)
+
+        # Step 3: Verify payment server-side
+        res_verify = self.client_user1.post(
+            f'/movies/theater/{self.theater.id}/payment/verify/',
+            data=json.dumps({
+                'order_id': order_id,
+                'payment_id': 'pay_test123',
+                'signature': 'sandbox_signature_verified'
+            }),
+            content_type='application/json'
+        )
+        self.assertEqual(res_verify.status_code, 200)
+        self.assertTrue(res_verify.json()['success'])
+
+        # Verify database state
+        txn.refresh_from_db()
+        self.assertEqual(txn.status, 'SUCCESS')
+        self.assertEqual(txn.payment_id, 'pay_test123')
 
         self.seat1.refresh_from_db()
         self.assertTrue(self.seat1.is_booked)
+        self.assertTrue(Booking.objects.filter(user=self.user1, seat=self.seat1, payment=txn).exists())
+
+    def test_duplicate_payment_verification_idempotency(self):
+        """Test that sending duplicate payment verification requests never creates duplicate bookings."""
+        # Setup reserved seat and payment transaction
+        self.seat1.reserved_by = self.user1
+        self.seat1.reserved_until = timezone.now() + timedelta(minutes=2)
+        self.seat1.save()
+
+        txn = PaymentTransaction.objects.create(
+            user=self.user1,
+            order_id='order_idem_123',
+            amount=300.0,
+            currency='INR',
+            status='PENDING',
+            movie=self.movie,
+            theater=self.theater,
+            seats_summary='A1'
+        )
+
+        url = f'/movies/theater/{self.theater.id}/payment/verify/'
+        payload = json.dumps({
+            'order_id': 'order_idem_123',
+            'payment_id': 'pay_idem_456',
+            'signature': 'sandbox_signature_verified'
+        })
+
+        # Request 1: First payment verification
+        res1 = self.client_user1.post(url, data=payload, content_type='application/json')
+        self.assertEqual(res1.status_code, 200)
+        self.assertTrue(res1.json()['success'])
+        booking_count_initial = Booking.objects.filter(user=self.user1, seat=self.seat1).count()
+        self.assertEqual(booking_count_initial, 1)
+
+        # Request 2: Duplicate payment verification retry
+        res2 = self.client_user1.post(url, data=payload, content_type='application/json')
+        self.assertEqual(res2.status_code, 200)
+        self.assertTrue(res2.json()['already_processed'])
+
+        # Verify duplicate booking was NOT created
+        booking_count_final = Booking.objects.filter(user=self.user1, seat=self.seat1).count()
+        self.assertEqual(booking_count_final, 1)
+
+    def test_failed_payment_releases_reserved_seats(self):
+        """Test that payment failure automatically releases reserved seats back to available."""
+        # Reserve seat A1
+        self.client_user1.post(
+            f'/movies/theater/{self.theater.id}/reserve-seats/',
+            data=json.dumps({'seat_ids': [self.seat1.id]}),
+            content_type='application/json'
+        )
+        self.seat1.refresh_from_db()
+        self.assertEqual(self.seat1.reserved_by, self.user1)
+
+        # Create order
+        res_order = self.client_user1.post(
+            f'/movies/theater/{self.theater.id}/payment/create-order/',
+            data=json.dumps({'seat_ids': [self.seat1.id]}),
+            content_type='application/json'
+        )
+        order_id = res_order.json()['order_id']
+
+        # Handle failure
+        res_fail = self.client_user1.post(
+            f'/movies/theater/{self.theater.id}/payment/failure/',
+            data=json.dumps({'order_id': order_id, 'reason': 'Payment cancelled by user.'}),
+            content_type='application/json'
+        )
+        self.assertEqual(res_fail.status_code, 200)
+        self.assertTrue(res_fail.json()['released'])
+
+        # Verify seat A1 is released and transaction marked CANCELLED
+        self.seat1.refresh_from_db()
         self.assertIsNone(self.seat1.reserved_by)
-        self.assertTrue(Booking.objects.filter(user=self.user1, seat=self.seat1).exists())
+        self.assertFalse(self.seat1.is_booked)
+
+        txn = PaymentTransaction.objects.get(order_id=order_id)
+        self.assertEqual(txn.status, 'CANCELLED')

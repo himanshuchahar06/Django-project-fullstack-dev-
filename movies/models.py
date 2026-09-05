@@ -169,11 +169,42 @@ class Seat(models.Model):
             return max(0, int(delta))
         return 0
 
+PAYMENT_STATUS_CHOICES = [
+    ('PENDING', 'Pending'),
+    ('SUCCESS', 'Success'),
+    ('FAILED', 'Failed'),
+    ('CANCELLED', 'Cancelled'),
+    ('REFUNDED', 'Refunded'),
+]
+
+class PaymentTransaction(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='payment_transactions')
+    order_id = models.CharField(max_length=255, unique=True)
+    payment_id = models.CharField(max_length=255, blank=True, null=True)
+    signature = models.CharField(max_length=255, blank=True, null=True)
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    currency = models.CharField(max_length=10, default='INR')
+    status = models.CharField(max_length=20, choices=PAYMENT_STATUS_CHOICES, default='PENDING')
+    gateway = models.CharField(max_length=50, default='Razorpay')
+    movie = models.ForeignKey(Movie, on_delete=models.CASCADE, related_name='payments')
+    theater = models.ForeignKey(Theater, on_delete=models.CASCADE, related_name='payments')
+    seats_summary = models.CharField(max_length=255)
+    failure_reason = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Txn #{self.order_id} - {self.user.username} ({self.status}) - ₹{self.amount}"
+
 class Booking(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     seat = models.OneToOneField(Seat, on_delete=models.CASCADE)
     movie = models.ForeignKey(Movie, on_delete=models.CASCADE)
     theater = models.ForeignKey(Theater, on_delete=models.CASCADE)
+    payment = models.ForeignKey(PaymentTransaction, null=True, blank=True, on_delete=models.SET_NULL, related_name='bookings')
     booked_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
