@@ -35,6 +35,13 @@ class SmartSeatReservationTestCase(TestCase):
         self.seat2 = Seat.objects.create(theater=self.theater, seat_number='A2')
         self.seat3 = Seat.objects.create(theater=self.theater, seat_number='A3')
 
+    def test_book_seats_get_request_returns_http_response(self):
+        """GET request to book_seats must return 200 OK HttpResponse."""
+        url = f'/movies/theater/{self.theater.id}/seats/book/'
+        response = self.client_user1.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'movies/seat_selection.html')
+
     def test_seat_reservation_success_and_2min_lock(self):
         """User 1 reserves Seat A1; check 2-min lock and status for User 1 vs User 2."""
         url = f'/movies/theater/{self.theater.id}/reserve-seats/'

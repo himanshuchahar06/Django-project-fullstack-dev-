@@ -428,6 +428,9 @@ def book_seats(request, theater_id):
         messages.success(request, "Your seats have been booked successfully!")
         return redirect('profile')
         
+    seats = Seat.objects.filter(theater=theaters).order_by('id')
+    return render(request, 'movies/seat_selection.html', {'theaters': theaters, 'theater': theaters, "seats": seats})
+
 @login_required(login_url='/login/')
 def create_payment_order(request, theater_id):
     """
