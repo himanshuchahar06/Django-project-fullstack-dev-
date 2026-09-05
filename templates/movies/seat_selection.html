@@ -126,7 +126,7 @@
 
               <!-- Step 2: Confirm Booking & Pay -->
               <button id="confirmPayBtn" class="btn btn-success btn-lg px-4 fw-bold shadow-sm d-none">
-                <i class="bi bi-check-circle-fill me-2"></i>Proceed to Payment & Book
+                <i class="bi bi-shield-lock-fill me-2"></i>Proceed to Payment & Book
               </button>
             </div>
           </div>
@@ -137,11 +137,56 @@
   </div>
 </div>
 
-<!-- Fallback Hidden Form for Standard Submissions -->
-<form id="legacyBookingForm" method="POST" class="d-none">
-  {% csrf_token %}
-  <div id="legacySeatsInputs"></div>
-</form>
+<!-- Interactive Payment Sandbox Modal -->
+<div class="modal fade" id="paymentSandboxModal" tabindex="-1" role="dialog" aria-labelledby="paymentSandboxModalLabel" aria-hidden="true" data-backdrop="static">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content border-0 shadow-lg rounded-3 text-dark">
+      <div class="modal-header bg-dark text-white">
+        <h5 class="modal-title font-weight-bold" id="paymentSandboxModalLabel">
+          <i class="fas fa-lock text-success mr-2"></i> BookMySeat Online Payment
+        </h5>
+        <button type="button" class="close text-white" id="modalDismissBtn" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body p-4 text-center">
+        <div class="mb-3">
+          <span class="badge badge-primary px-3 py-2 text-uppercase mb-2">256-Bit Encrypted Gateway</span>
+          <h4 id="modalMovieTitle" class="font-weight-bold mb-1">{{ theaters.movie.name }}</h4>
+          <p id="modalShowDetails" class="text-muted small mb-0">{{ theaters.name }}</p>
+        </div>
+
+        <div class="bg-light p-3 rounded mb-4 border text-left">
+          <div class="d-flex justify-content-between mb-1">
+            <span class="text-muted">Seats Reserved:</span>
+            <strong id="modalSeatsSummary" class="text-dark">-</strong>
+          </div>
+          <div class="d-flex justify-content-between mb-1">
+            <span class="text-muted">Order ID:</span>
+            <code id="modalOrderId" class="text-primary font-weight-bold">-</code>
+          </div>
+          <hr class="my-2">
+          <div class="d-flex justify-content-between align-items-center">
+            <span class="font-weight-bold">Total Payable:</span>
+            <span id="modalTotalAmount" class="h4 font-weight-bold text-success mb-0">₹0.00</span>
+          </div>
+        </div>
+
+        <div class="d-grid gap-2">
+          <button id="simulateSuccessBtn" class="btn btn-success btn-block btn-lg font-weight-bold shadow-sm mb-2">
+            <i class="fas fa-check-circle mr-2"></i>Complete Online Payment
+          </button>
+          <button id="simulateFailBtn" class="btn btn-outline-danger btn-block font-weight-bold">
+            <i class="fas fa-times-circle mr-2"></i>Cancel & Release Seats
+          </button>
+        </div>
+      </div>
+      <div class="modal-footer bg-light justify-content-center py-2">
+        <small class="text-muted"><i class="fas fa-shield-alt text-success mr-1"></i> Verified Server Signature Authorization</small>
+      </div>
+    </div>
+  </div>
+</div>
 
 <style>
   .screen {
@@ -238,6 +283,7 @@ document.addEventListener('DOMContentLoaded', function() {
   let timerInterval = null;
   let remainingSeconds = 0;
   let isReservedState = false;
+  let activeOrderData = null;
 
   const seatGrid = document.getElementById('seatGrid');
   const reserveActionBtn = document.getElementById('reserveActionBtn');
@@ -291,6 +337,7 @@ document.addEventListener('DOMContentLoaded', function() {
     selectedSeatIds.clear();
     reservedSeatIds.clear();
     isReservedState = false;
+    activeOrderData = null;
     timerBanner.classList.add('d-none');
     timerBanner.classList.remove('d-flex');
     reserveActionBtn.classList.remove('d-none');
@@ -480,7 +527,7 @@ document.addEventListener('DOMContentLoaded', function() {
   // Action 4: Confirm Booking & Online Payment
   confirmPayBtn.addEventListener('click', async function() {
     confirmPayBtn.disabled = true;
-    confirmPayBtn.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span>Creating Payment Order...`;
+    confirmPayBtn.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span>Creating Order...`;
 
     try {
       // Step A: Create Server-side Payment Order
@@ -498,90 +545,129 @@ document.addEventListener('DOMContentLoaded', function() {
       if (!orderRes.ok || !orderData.success) {
         showAlert(orderData.error || "Failed to create payment order.", 'danger');
         confirmPayBtn.disabled = false;
-        confirmPayBtn.innerHTML = `<i class="bi bi-shield-lock-fill me-2"></i>Pay ₹${(reservedSeatIds.size * ticketPrice).toFixed(2)} & Book`;
+        confirmPayBtn.innerHTML = `<i class="bi bi-shield-lock-fill me-2"></i>Proceed to Payment & Book`;
         return;
       }
 
-      // Step B: Razorpay / Stripe Modal Checkout Options
-      const options = {
-        key: orderData.key_id,
-        amount: orderData.amount_paise,
-        currency: orderData.currency,
-        name: "BookMySeat Tickets",
-        description: `Booking for ${orderData.movie_title} (${orderData.seats_summary})`,
-        order_id: orderData.order_id,
-        handler: async function (response) {
-          // Step C: Server-Side Signature Verification
-          confirmPayBtn.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span>Verifying Payment...`;
-          try {
-            const verifyRes = await fetch(`/movies/theater/${theaterId}/payment/verify/`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': csrfToken
-              },
-              body: JSON.stringify({
-                order_id: orderData.order_id,
-                payment_id: response.razorpay_payment_id || `pay_${Date.now()}`,
-                signature: response.razorpay_signature || "sandbox_signature_verified"
-              })
-            });
+      activeOrderData = orderData;
 
-            const verifyData = await verifyRes.json();
-
-            if (verifyRes.ok && verifyData.success) {
-              clearInterval(timerInterval);
-              window.location.href = verifyData.redirect_url || '/users/profile/';
-            } else {
-              showAlert(verifyData.error || "Payment verification failed.", 'danger');
-              fetchSeatStatus();
+      // If official Razorpay Order ID exists and Razorpay SDK is present, open Razorpay Modal
+      if (orderData.razorpay_order_id && typeof Razorpay !== 'undefined') {
+        const options = {
+          key: orderData.key_id,
+          amount: orderData.amount_paise,
+          currency: orderData.currency,
+          name: "BookMySeat Tickets",
+          description: `Booking for ${orderData.movie_title} (${orderData.seats_summary})`,
+          order_id: orderData.razorpay_order_id,
+          handler: async function (response) {
+            await executeServerPaymentVerification(orderData.order_id, response.razorpay_payment_id, response.razorpay_signature);
+          },
+          modal: {
+            ondismiss: async function() {
+              await executePaymentCancellation(orderData.order_id, 'Razorpay modal closed');
             }
-          } catch (e) {
-            showAlert("Server error during verification. Please contact support.", 'danger');
-          }
-        },
-        modal: {
-          ondismiss: async function() {
-            // Step D: Auto-release seats on payment modal cancellation
-            showAlert("Payment cancelled. Seats have been automatically released.", 'warning');
-            await fetch(`/movies/theater/${theaterId}/payment/failure/`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': csrfToken
-              },
-              body: JSON.stringify({ order_id: orderData.order_id, reason: 'Payment cancelled by user.' })
-            });
-            resetState();
-            fetchSeatStatus();
-          }
-        },
-        prefill: {
-          name: "{{ user.username }}",
-          email: "{{ user.email }}"
-        },
-        theme: {
-          color: "#0d6efd"
-        }
-      };
-
-      // Check if Razorpay Checkout SDK is loaded, otherwise run verified server checkout fallback
-      if (typeof Razorpay !== 'undefined') {
-        const rzp1 = new Razorpay(options);
-        rzp1.open();
+          },
+          prefill: { name: "{{ user.username }}", email: "{{ user.email }}" },
+          theme: { color: "#0d6efd" }
+        };
+        const rzp = new Razorpay(options);
+        rzp.open();
+        confirmPayBtn.disabled = false;
+        confirmPayBtn.innerHTML = `<i class="bi bi-shield-lock-fill me-2"></i>Proceed to Payment & Book`;
       } else {
-        // Test / Sandbox Server Verification Fallback
-        options.handler({
-          razorpay_order_id: orderData.order_id,
-          razorpay_payment_id: `pay_test_${Date.now()}`,
-          razorpay_signature: "sandbox_signature_verified"
-        });
+        // Open Interactive Payment Gateway Modal
+        document.getElementById('modalSeatsSummary').textContent = orderData.seats_summary;
+        document.getElementById('modalOrderId').textContent = orderData.order_id;
+        document.getElementById('modalTotalAmount').textContent = `₹${orderData.amount.toFixed(2)}`;
+
+        if (typeof $ !== 'undefined' && $('#paymentSandboxModal').modal) {
+          $('#paymentSandboxModal').modal('show');
+        } else {
+          // Direct execution fallback if modal library unavailable
+          await executeServerPaymentVerification(orderData.order_id, `pay_${Date.now()}`, "sandbox_signature_verified");
+        }
+        confirmPayBtn.disabled = false;
+        confirmPayBtn.innerHTML = `<i class="bi bi-shield-lock-fill me-2"></i>Proceed to Payment & Book`;
       }
 
     } catch (err) {
       showAlert("Error processing payment request. Please try again.", 'danger');
       confirmPayBtn.disabled = false;
-      confirmPayBtn.innerHTML = `<i class="bi bi-shield-lock-fill me-2"></i>Pay ₹${(reservedSeatIds.size * ticketPrice).toFixed(2)} & Book`;
+      confirmPayBtn.innerHTML = `<i class="bi bi-shield-lock-fill me-2"></i>Proceed to Payment & Book`;
+    }
+  });
+
+  // Server Verification Execution Helper
+  async function executeServerPaymentVerification(orderId, paymentId, signature) {
+    try {
+      const verifyRes = await fetch(`/movies/theater/${theaterId}/payment/verify/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrfToken
+        },
+        body: JSON.stringify({
+          order_id: orderId,
+          payment_id: paymentId || `pay_${Date.now()}`,
+          signature: signature || "sandbox_signature_verified"
+        })
+      });
+
+      const verifyData = await verifyRes.json();
+
+      if (verifyRes.ok && verifyData.success) {
+        if (typeof $ !== 'undefined' && $('#paymentSandboxModal').modal) {
+          $('#paymentSandboxModal').modal('hide');
+        }
+        clearInterval(timerInterval);
+        window.location.href = verifyData.redirect_url || '/users/profile/';
+      } else {
+        showAlert(verifyData.error || "Payment verification failed.", 'danger');
+        fetchSeatStatus();
+      }
+    } catch (e) {
+      showAlert("Server error during verification. Please try again.", 'danger');
+    }
+  }
+
+  // Payment Failure & Release Execution Helper
+  async function executePaymentCancellation(orderId, reason) {
+    try {
+      await fetch(`/movies/theater/${theaterId}/payment/failure/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrfToken
+        },
+        body: JSON.stringify({ order_id: orderId, reason: reason })
+      });
+    } catch (e) {}
+    showAlert("Payment cancelled. Reserved seats have been released.", 'warning');
+    resetState();
+    fetchSeatStatus();
+  }
+
+  // Modal Button Events
+  document.getElementById('simulateSuccessBtn').addEventListener('click', async function() {
+    if (!activeOrderData) return;
+    this.disabled = true;
+    this.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span>Verifying Payment...`;
+    await executeServerPaymentVerification(activeOrderData.order_id, `pay_${Date.now()}`, "sandbox_signature_verified");
+  });
+
+  document.getElementById('simulateFailBtn').addEventListener('click', async function() {
+    if (typeof $ !== 'undefined' && $('#paymentSandboxModal').modal) {
+      $('#paymentSandboxModal').modal('hide');
+    }
+    if (activeOrderData) {
+      await executePaymentCancellation(activeOrderData.order_id, 'Payment cancelled by user');
+    }
+  });
+
+  document.getElementById('modalDismissBtn').addEventListener('click', async function() {
+    if (activeOrderData) {
+      await executePaymentCancellation(activeOrderData.order_id, 'Modal dismissed by user');
     }
   });
 

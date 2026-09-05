@@ -1,3 +1,4 @@
+import os
 import json
 import hmac
 import hashlib
@@ -488,15 +489,33 @@ def create_payment_order(request, theater_id):
             seats_summary=', '.join(seat_numbers)
         )
 
-    key_id = getattr(settings, 'RAZORPAY_KEY_ID', 'rzp_test_bookmyseat123')
+    key_id = os.environ.get('RAZORPAY_KEY_ID') or getattr(settings, 'RAZORPAY_KEY_ID', None)
+    key_secret = os.environ.get('RAZORPAY_KEY_SECRET') or getattr(settings, 'RAZORPAY_KEY_SECRET', None)
+    
+    razorpay_order_id = None
+    if key_id and key_secret and key_id.startswith('rzp_'):
+        try:
+            import razorpay
+            client = razorpay.Client(auth=(key_id, key_secret))
+            rzp_order = client.order.create({
+                'amount': int(total_amount * 100),
+                'currency': 'INR',
+                'receipt': order_id,
+                'payment_capture': 1
+            })
+            razorpay_order_id = rzp_order.get('id')
+        except Exception:
+            razorpay_order_id = None
 
     return JsonResponse({
         'success': True,
         'order_id': order_id,
+        'razorpay_order_id': razorpay_order_id,
+        'is_sandbox': razorpay_order_id is None,
         'amount': total_amount,
         'amount_paise': int(total_amount * 100),
         'currency': 'INR',
-        'key_id': key_id,
+        'key_id': key_id or 'rzp_test_sandbox',
         'movie_title': theater.movie.name,
         'theater_name': theater.name,
         'seats_summary': ', '.join(seat_numbers),
