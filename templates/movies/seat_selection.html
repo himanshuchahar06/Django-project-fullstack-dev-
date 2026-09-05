@@ -1,170 +1,517 @@
-{% extends "users/basic.html" %} {% block content %}
-<div class="container mt-5">
-  <div class="row">
-    <div class="col-lg-8 mx-auto">
-      <!-- Movie and Theater Info -->
-      <div class="card mb-4">
-        <div class="card-body">
-          <div
-            class="d-flex justify-content-between align-items-center flex-wrap"
-          >
+{% extends "users/basic.html" %}
+{% block content %}
+<div class="container py-4">
+  <div class="row justify-content-center">
+    <div class="col-lg-10">
+
+      <!-- Header & Show Information Card -->
+      <div class="card shadow-sm border-0 mb-4 bg-dark text-white rounded-3">
+        <div class="card-body p-4">
+          <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center">
             <div>
-              <h4 class="card-title">{{ theaters.movie.name }}</h4>
-              <p class="card-text text-muted">
-                {{ theaters.name }} | {{ theaters.time }}
+              <span class="badge bg-primary text-uppercase mb-2 px-3 py-2">Now Booking</span>
+              <h2 class="fw-bold mb-1">{{ theaters.movie.name }}</h2>
+              <p class="text-light-50 mb-0 opacity-75">
+                <i class="bi bi-geo-alt-fill text-danger me-1"></i> {{ theaters.name }} 
+                <span class="mx-2">•</span> 
+                <i class="bi bi-clock-fill text-warning me-1"></i> {{ theaters.time|date:"D, d M Y - h:i A" }}
               </p>
             </div>
-            <div class="mt-2 mt-sm-0">
-              <button class="btn btn-outline-primary me-2 mb-2 mb-sm-0">
-                2D
+            <div class="mt-3 mt-md-0 text-md-end">
+              <div class="text-muted small">TICKET PRICE</div>
+              <div class="fs-3 fw-bold text-success">₹{{ theaters.ticket_price }} <span class="fs-6 text-muted fw-normal">/ seat</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Live Reservation Timer Banner (Hidden until seats are held) -->
+      <div id="reservationTimerBanner" class="alert alert-warning border-warning shadow-sm d-none align-items-center justify-content-between mb-4 rounded-3">
+        <div class="d-flex align-items-center">
+          <div class="spinner-grow spinner-grow-sm text-warning me-3" role="status"></div>
+          <div>
+            <h6 class="fw-bold mb-0">Seats Temporarily Reserved!</h6>
+            <small class="text-dark">Complete payment before timer expires or seats will be automatically released.</small>
+          </div>
+        </div>
+        <div class="d-flex align-items-center ms-3">
+          <div class="badge bg-dark text-warning fs-5 px-3 py-2 font-monospace me-2" id="timerDisplay">02:00</div>
+          <button id="modifySelectionBtn" class="btn btn-sm btn-outline-dark me-2">Modify Seats</button>
+          <button id="releaseSeatsBtn" class="btn btn-sm btn-outline-danger">Cancel</button>
+        </div>
+      </div>
+
+      <!-- Dynamic Alert Box -->
+      <div id="statusAlert" class="alert alert-danger d-none shadow-sm rounded-3" role="alert"></div>
+
+      {% if error %}
+      <div class="alert alert-danger shadow-sm rounded-3" role="alert">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>{{ error }}
+      </div>
+      {% endif %}
+
+      <!-- Seat Map Container -->
+      <div class="card shadow-sm border-0 mb-4 rounded-3">
+        <div class="card-body p-4 text-center">
+
+          <h5 class="fw-bold mb-3 text-uppercase tracking-wide text-secondary">Cinema Screen</h5>
+          <div class="screen mb-5 mx-auto rounded-pill shadow-sm">
+            <span class="small fw-semibold text-muted text-uppercase">SCREEN THIS WAY</span>
+          </div>
+
+          <!-- Seat Grid -->
+          <div id="seatGrid" class="d-flex flex-wrap justify-content-center gap-2 mb-4 mx-auto" style="max-width: 750px;">
+            {% for seat in seats %}
+              {% if seat.is_booked %}
+                <div class="seat-item seat-booked" title="Seat {{ seat.seat_number }} (Sold)">
+                  {{ seat.seat_number }}
+                </div>
+              {% elif seat.reserved_until and seat.reserved_until > now and seat.reserved_by == user %}
+                <div class="seat-item seat-reserved-you" data-seat-id="{{ seat.id }}" title="Seat {{ seat.seat_number }} (Reserved by You)">
+                  {{ seat.seat_number }}
+                </div>
+              {% elif seat.reserved_until and seat.reserved_until > now %}
+                <div class="seat-item seat-reserved-other" title="Seat {{ seat.seat_number }} (Reserved by another user)">
+                  {{ seat.seat_number }}
+                </div>
+              {% else %}
+                <div class="seat-item seat-available" data-seat-id="{{ seat.id }}" title="Seat {{ seat.seat_number }} (Available)">
+                  {{ seat.seat_number }}
+                </div>
+              {% endif %}
+            {% endfor %}
+          </div>
+
+          <!-- Seat Status Legend -->
+          <div class="d-flex flex-wrap justify-content-center align-items-center gap-4 py-3 bg-light rounded-3 border">
+            <div class="d-flex align-items-center">
+              <div class="seat-legend seat-available me-2"></div>
+              <span class="small fw-medium">Available</span>
+            </div>
+            <div class="d-flex align-items-center">
+              <div class="seat-legend seat-selected me-2"></div>
+              <span class="small fw-medium">Selected</span>
+            </div>
+            <div class="d-flex align-items-center">
+              <div class="seat-legend seat-reserved-you me-2"></div>
+              <span class="small fw-medium">Reserved by You (2m Lock)</span>
+            </div>
+            <div class="d-flex align-items-center">
+              <div class="seat-legend seat-reserved-other me-2"></div>
+              <span class="small fw-medium">Held by Other</span>
+            </div>
+            <div class="d-flex align-items-center">
+              <div class="seat-legend seat-booked me-2"></div>
+              <span class="small fw-medium">Sold / Booked</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Checkout / Booking Action Card -->
+      <div class="card shadow-sm border-0 rounded-3 mb-5">
+        <div class="card-body p-4">
+          <div class="row align-items-center">
+            <div class="col-md-6 mb-3 mb-md-0">
+              <h6 class="text-muted mb-1 text-uppercase small fw-bold">Selected Seats Summary</h6>
+              <div id="selectedSeatsSummary" class="fw-bold fs-5 text-dark">No seats selected</div>
+              <div id="totalPriceSummary" class="text-muted small">Total: ₹0.00</div>
+            </div>
+            <div class="col-md-6 text-md-end">
+              <!-- Step 1: Reserve Seats -->
+              <button id="reserveActionBtn" class="btn btn-warning btn-lg px-4 fw-bold shadow-sm" disabled>
+                <i class="bi bi-clock-history me-2"></i>Hold & Reserve Seats (2 Min)
               </button>
-              <button class="btn btn-outline-primary me-2 mb-2 mb-sm-0">
-                3D
-              </button>
-              <button class="btn btn-outline-primary mb-2 mb-sm-0">
-                IMAX 3D
-              </button>
-              <button class="btn btn-outline-primary mb-2 mb-sm-0">
-                {{seats|length}} Tickets
+
+              <!-- Step 2: Confirm Booking & Pay -->
+              <button id="confirmPayBtn" class="btn btn-success btn-lg px-4 fw-bold shadow-sm d-none">
+                <i class="bi bi-check-circle-fill me-2"></i>Proceed to Payment & Book
               </button>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- Seat Selection -->
-      <div class="card">
-        <div class="card-body">
-          <h5 class="card-title text-center mb-4">Select Your Seats</h5>
-          <div class="screen">All eyes this way please!</div>
-
-          <form method="POST">
-            {% csrf_token %}
-            <div class="d-flex justify-content-center flex-wrap mb-4">
-              {% for seat in seats %}
-              <div class="seat {% if seat.is_booked %}sold{% endif %}">
-                {% if not seat.is_booked %}
-                <input
-                  type="checkbox"
-                  name="seats"
-                  value="{{ seat.id }}"
-                  class="d-none"
-                  id="seat-{{ seat.id }}"
-                />
-                <label
-                  for="seat-{{ seat.id }}"
-                  class="w-100 h-100 d-flex align-items-center justify-content-center"
-                  >{{ seat.seat_number }}</label
-                >
-                {% else %} {{ seat.seat_number }} {% endif %}
-              </div>
-              {% endfor %}
-            </div>
-
-            <!-- Seat Legend -->
-            <div class="d-flex justify-content-center mb-4">
-              <div class="d-flex align-items-center me-4">
-                <div class="seat" style="background-color: white"></div>
-                <span class="ms-2">Available</span>
-              </div>
-              <div class="d-flex align-items-center me-4">
-                <div class="seat selected"></div>
-                <span class="ms-2">Selected</span>
-              </div>
-              <div class="d-flex align-items-center">
-                <div class="seat sold"></div>
-                <span class="ms-2">Sold</span>
-              </div>
-            </div>
-
-            <!-- Book Button -->
-            <div class="text-center">
-              <button type="submit" class="btn btn-success btn-lg">
-                Book Selected Seats
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
     </div>
   </div>
 </div>
+
+<!-- Fallback Hidden Form for Standard Submissions -->
+<form id="legacyBookingForm" method="POST" class="d-none">
+  {% csrf_token %}
+  <div id="legacySeatsInputs"></div>
+</form>
+
 <style>
-  body {
-    font-family: Arial, sans-serif;
-  }
-  .seat {
-    width: 30px;
-    height: 30px;
-    border: 1px solid #28a745;
-    margin: 3px;
-    text-align: center;
-    line-height: 30px;
-    cursor: pointer;
-    border-radius: 5px;
-    transition: background-color 0.3s, color 0.3s;
-  }
-  .seat:hover {
-    background-color: #28a745;
-    color: white;
-  }
-  .seat.selected {
-    background-color: #28a745;
-    color: white;
-  }
-  .seat.sold {
-    background-color: #ccc;
-    cursor: not-allowed;
-  }
   .screen {
-    margin: 20px 0;
-    background-color: #ccc;
-    height: 50px;
-    text-align: center;
-    line-height: 50px;
-    color: #666;
+    height: 35px;
+    background: linear-gradient(180deg, #dee2e6 0%, #e9ecef 100%);
+    border-top: 4px solid #0d6efd;
+    box-shadow: 0 4px 15px rgba(13, 110, 253, 0.15);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    letter-spacing: 2px;
   }
-  .footer {
-    background-color: #333;
-    color: #ccc;
-    padding: 20px 0;
+
+  .seat-item, .seat-legend {
+    width: 38px;
+    height: 38px;
+    border-radius: 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    font-size: 0.85rem;
+    user-select: none;
+    transition: all 0.2s ease-in-out;
   }
-  .footer a {
-    color: #ccc;
-    text-decoration: none;
+
+  .seat-item {
+    cursor: pointer;
   }
-  .footer a:hover {
-    text-decoration: underline;
+
+  /* Available */
+  .seat-available {
+    background-color: #ffffff;
+    border: 2px solid #198754;
+    color: #198754;
   }
-  .footer .col-md-2,
-  .footer .col-md-3 {
-    margin-bottom: 20px;
+  .seat-available:hover {
+    background-color: #198754;
+    color: #ffffff;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(25, 135, 84, 0.25);
   }
-  .footer .social-icons i {
-    font-size: 20px;
-    margin: 0 10px;
+
+  /* Selected by User */
+  .seat-selected {
+    background-color: #0d6efd !important;
+    border: 2px solid #0d6efd !important;
+    color: #ffffff !important;
+    transform: scale(1.08);
+    box-shadow: 0 4px 10px rgba(13, 110, 253, 0.35);
+  }
+
+  /* Temporarily Reserved by User */
+  .seat-reserved-you {
+    background-color: #ffc107 !important;
+    border: 2px solid #d39e00 !important;
+    color: #212529 !important;
+    animation: pulse-border 1.5s infinite;
+  }
+
+  /* Reserved by Someone Else */
+  .seat-reserved-other {
+    background-color: #fd7e14 !important;
+    border: 2px solid #e8590c !important;
+    color: #ffffff !important;
+    cursor: not-allowed;
+    opacity: 0.85;
+  }
+
+  /* Sold / Booked */
+  .seat-booked {
+    background-color: #6c757d !important;
+    border: 2px solid #495057 !important;
+    color: #ffffff !important;
+    cursor: not-allowed;
+    opacity: 0.65;
+  }
+
+  @keyframes pulse-border {
+    0% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0.6); }
+    70% { box-shadow: 0 0 0 8px rgba(255, 193, 7, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0); }
   }
 </style>
-<!-- <h1>Seats for {{theater.name}} - {{theater.movie.name}}</h1>
-{% if error %}
-<p style="color:red;">{{error}}</p>
-{% endif %}
-<form method="POST">
-    {% csrf_token %}
-    <ul>
-        {% for seat in seats %}
-        <li>
-          Seats{{seat.seat_number}}:
-          {% if seat.is_booked %}
-          <strong>Booked seat {{seat.seat_number}}</strong>
-          {% else %}
-          <input type="checkbox" name="seats" value="{{seat.id}}">
-          <strong>Available seat {{seat.seat_number}}</strong>
-          {% endif%}
-        </li>
-        {% endfor %}
-      </ul>
-      <button type="submit">Book selected seats</button>
-</form> -->
 
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const theaterId = {{ theaters.id }};
+  const ticketPrice = {{ theaters.ticket_price }};
+  const csrfToken = '{{ csrf_token }}';
+
+  let selectedSeatIds = new Set();
+  let reservedSeatIds = new Set();
+  let timerInterval = null;
+  let remainingSeconds = 0;
+  let isReservedState = false;
+
+  const seatGrid = document.getElementById('seatGrid');
+  const reserveActionBtn = document.getElementById('reserveActionBtn');
+  const confirmPayBtn = document.getElementById('confirmPayBtn');
+  const modifySelectionBtn = document.getElementById('modifySelectionBtn');
+  const releaseSeatsBtn = document.getElementById('releaseSeatsBtn');
+  const timerBanner = document.getElementById('reservationTimerBanner');
+  const timerDisplay = document.getElementById('timerDisplay');
+  const statusAlert = document.getElementById('statusAlert');
+  const selectedSeatsSummary = document.getElementById('selectedSeatsSummary');
+  const totalPriceSummary = document.getElementById('totalPriceSummary');
+
+  function showAlert(msg, type = 'danger') {
+    statusAlert.className = `alert alert-${type} shadow-sm rounded-3`;
+    statusAlert.innerHTML = `<i class="bi bi-info-circle-fill me-2"></i>${msg}`;
+    statusAlert.classList.remove('d-none');
+    setTimeout(() => {
+      statusAlert.classList.add('d-none');
+    }, 6000);
+  }
+
+  function formatTime(seconds) {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  }
+
+  function startTimer(seconds) {
+    clearInterval(timerInterval);
+    remainingSeconds = seconds;
+    timerBanner.classList.remove('d-none');
+    timerBanner.classList.add('d-flex');
+    timerDisplay.textContent = formatTime(remainingSeconds);
+
+    timerInterval = setInterval(() => {
+      remainingSeconds--;
+      if (remainingSeconds <= 0) {
+        clearInterval(timerInterval);
+        timerDisplay.textContent = "00:00";
+        showAlert("Your 2-minute reservation expired! Seats have been released.", 'warning');
+        resetState();
+        fetchSeatStatus();
+      } else {
+        timerDisplay.textContent = formatTime(remainingSeconds);
+      }
+    }, 1000);
+  }
+
+  function resetState() {
+    clearInterval(timerInterval);
+    selectedSeatIds.clear();
+    reservedSeatIds.clear();
+    isReservedState = false;
+    timerBanner.classList.add('d-none');
+    timerBanner.classList.remove('d-flex');
+    reserveActionBtn.classList.remove('d-none');
+    reserveActionBtn.disabled = true;
+    confirmPayBtn.classList.add('d-none');
+    updateSummary();
+  }
+
+  function updateSummary() {
+    const totalCount = isReservedState ? reservedSeatIds.size : selectedSeatIds.size;
+    const totalCost = (totalCount * ticketPrice).toFixed(2);
+
+    if (totalCount === 0) {
+      selectedSeatsSummary.textContent = "No seats selected";
+      totalPriceSummary.textContent = "Total: ₹0.00";
+      reserveActionBtn.disabled = true;
+    } else {
+      const activeSet = isReservedState ? reservedSeatIds : selectedSeatIds;
+      const seatNumbers = [];
+      document.querySelectorAll('.seat-item').forEach(el => {
+        const id = parseInt(el.dataset.seatId);
+        if (activeSet.has(id)) {
+          seatNumbers.push(el.textContent.trim());
+        }
+      });
+      selectedSeatsSummary.textContent = `${totalCount} Seat(s): ${seatNumbers.join(', ')}`;
+      totalPriceSummary.textContent = `Total: ₹${totalCost}`;
+      reserveActionBtn.disabled = false;
+    }
+  }
+
+  // Fetch real-time seat availability
+  async function fetchSeatStatus() {
+    try {
+      const res = await fetch(`/movies/theater/${theaterId}/seat-status/`);
+      const data = await res.json();
+      if (!data.success) return;
+
+      let userHasActiveReservation = false;
+      let maxRemainingTime = 0;
+
+      data.seats.forEach(s => {
+        let seatEl = document.querySelector(`.seat-item[data-seat-id="${s.id}"]`);
+        if (!seatEl) {
+          seatEl = document.createElement('div');
+          seatEl.className = 'seat-item';
+          seatEl.dataset.seatId = s.id;
+          seatGrid.appendChild(seatEl);
+        }
+        
+        seatEl.className = 'seat-item';
+        seatEl.dataset.seatId = s.id;
+        seatEl.textContent = s.seat_number;
+
+        if (s.status === 'booked') {
+          seatEl.classList.add('seat-booked');
+          seatEl.title = `Seat ${s.seat_number} (Sold)`;
+          selectedSeatIds.delete(s.id);
+          reservedSeatIds.delete(s.id);
+        } else if (s.status === 'reserved_by_you') {
+          userHasActiveReservation = true;
+          reservedSeatIds.add(s.id);
+          if (s.remaining_seconds > maxRemainingTime) maxRemainingTime = s.remaining_seconds;
+          seatEl.classList.add('seat-reserved-you');
+          seatEl.title = `Seat ${s.seat_number} (Reserved by You - 2 min lock)`;
+        } else if (s.status === 'reserved_by_other') {
+          seatEl.classList.add('seat-reserved-other');
+          seatEl.title = `Seat ${s.seat_number} (Temporarily held by another user)`;
+          selectedSeatIds.delete(s.id);
+          reservedSeatIds.delete(s.id);
+        } else {
+          // Available
+          if (selectedSeatIds.has(s.id)) {
+            seatEl.classList.add('seat-selected');
+          } else {
+            seatEl.classList.add('seat-available');
+          }
+          seatEl.title = `Seat ${s.seat_number} (Available)`;
+        }
+      });
+
+      if (userHasActiveReservation && !isReservedState) {
+        isReservedState = true;
+        reserveActionBtn.classList.add('d-none');
+        confirmPayBtn.classList.remove('d-none');
+        startTimer(maxRemainingTime > 0 ? maxRemainingTime : 120);
+      } else if (!userHasActiveReservation && isReservedState) {
+        resetState();
+      }
+
+      updateSummary();
+    } catch (e) {
+      console.error("Error updating seat status:", e);
+    }
+  }
+
+  // Seat Click Handler
+  seatGrid.addEventListener('click', function(e) {
+    const item = e.target.closest('.seat-item');
+    if (!item) return;
+
+    if (isReservedState) {
+      showAlert("You have seats locked in reservation. Click 'Modify Seats' to change your selection.", 'info');
+      return;
+    }
+
+    if (item.classList.contains('seat-booked') || item.classList.contains('seat-reserved-other')) {
+      showAlert("This seat is unavailable.", 'warning');
+      return;
+    }
+
+    const seatId = parseInt(item.dataset.seatId);
+
+    if (selectedSeatIds.has(seatId)) {
+      selectedSeatIds.delete(seatId);
+      item.classList.remove('seat-selected');
+      item.classList.add('seat-available');
+    } else {
+      selectedSeatIds.add(seatId);
+      item.classList.remove('seat-available');
+      item.classList.add('seat-selected');
+    }
+
+    updateSummary();
+  });
+
+  // Action 1: Reserve Seats (2-Minute Lock)
+  reserveActionBtn.addEventListener('click', async function() {
+    if (selectedSeatIds.size === 0) return;
+
+    reserveActionBtn.disabled = true;
+    reserveActionBtn.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span>Reserving...`;
+
+    try {
+      const res = await fetch(`/movies/theater/${theaterId}/reserve-seats/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrfToken
+        },
+        body: JSON.stringify({ seat_ids: Array.from(selectedSeatIds) })
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        isReservedState = true;
+        reservedSeatIds = new Set(data.seat_ids);
+        selectedSeatIds.clear();
+        reserveActionBtn.classList.add('d-none');
+        confirmPayBtn.classList.remove('d-none');
+        startTimer(data.remaining_seconds || 120);
+        showAlert(data.message, 'success');
+        fetchSeatStatus();
+      } else {
+        showAlert(data.error || "Reservation failed.", 'danger');
+        fetchSeatStatus();
+      }
+    } catch (err) {
+      showAlert("Error connecting to server. Please try again.", 'danger');
+    } finally {
+      reserveActionBtn.disabled = false;
+      reserveActionBtn.innerHTML = `<i class="bi bi-clock-history me-2"></i>Hold & Reserve Seats (2 Min)`;
+    }
+  });
+
+  // Action 2: Release / Cancel Hold
+  async function releaseReservation() {
+    try {
+      await fetch(`/movies/theater/${theaterId}/release-seats/`, {
+        method: 'POST',
+        headers: { 'X-CSRFToken': csrfToken }
+      });
+    } catch (e) {}
+    resetState();
+    fetchSeatStatus();
+  }
+
+  releaseSeatsBtn.addEventListener('click', releaseReservation);
+
+  // Action 3: Modify Seats
+  modifySelectionBtn.addEventListener('click', async function() {
+    selectedSeatIds = new Set(reservedSeatIds);
+    await releaseReservation();
+  });
+
+  // Action 4: Confirm Booking & Pay
+  confirmPayBtn.addEventListener('click', async function() {
+    confirmPayBtn.disabled = true;
+    confirmPayBtn.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span>Processing Payment...`;
+
+    try {
+      const res = await fetch(`/movies/theater/${theaterId}/confirm-booking/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrfToken
+        },
+        body: JSON.stringify({ seat_ids: Array.from(reservedSeatIds) })
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        clearInterval(timerInterval);
+        window.location.href = data.redirect_url || '/users/profile/';
+      } else {
+        showAlert(data.error || "Booking failed.", 'danger');
+        fetchSeatStatus();
+      }
+    } catch (err) {
+      showAlert("Error finalizing booking. Please try again.", 'danger');
+    } finally {
+      confirmPayBtn.disabled = false;
+      confirmPayBtn.innerHTML = `<i class="bi bi-check-circle-fill me-2"></i>Proceed to Payment & Book`;
+    }
+  });
+
+  // Auto-refresh seat availability every 3 seconds for live concurrency updates
+  fetchSeatStatus();
+  setInterval(fetchSeatStatus, 3000);
+});
+</script>
 {% endblock %}

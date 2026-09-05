@@ -1,9 +1,13 @@
+import json
+from datetime import timedelta
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib import messages
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from django.db.models import Q, Count
+from django.http import JsonResponse, HttpResponseBadRequest
+from django.utils import timezone
 from .models import (
     Movie, Theater, Seat, Booking, Genre, Language, 
     CastMember, MoviePoster, Review, ReviewReport
@@ -167,36 +171,260 @@ def theater_list(request, movie_id):
     theaters = Theater.objects.filter(movie=movie)
     return render(request, 'movies/theater_list.html', {'movie': movie, 'theaters': theaters})
 
+def auto_release_expired_seats(theater_id):
+    """Helper to clear expired 2-minute seat reservations for a theater."""
+    now = timezone.now()
+    Seat.objects.filter(
+        theater_id=theater_id,
+        is_booked=False,
+        reserved_until__lte=now
+    ).update(reserved_by=None, reserved_until=None)
+
+def get_seat_status(request, theater_id):
+    """API endpoint returning real-time seat availability for a theater."""
+    auto_release_expired_seats(theater_id)
+    theater = get_object_or_404(Theater, id=theater_id)
+    seats = Seat.objects.filter(theater=theater).order_by('id')
+    
+    seat_data = []
+    for seat in seats:
+        seat_data.append({
+            'id': seat.id,
+            'seat_number': seat.seat_number,
+            'status': seat.get_status(request.user),
+            'remaining_seconds': seat.get_remaining_seconds() if seat.is_reserved_by(request.user) else 0,
+        })
+        
+    return JsonResponse({
+        'success': True,
+        'theater_id': theater.id,
+        'movie_title': theater.movie.name,
+        'ticket_price': float(theater.ticket_price),
+        'seats': seat_data,
+    })
+
+@login_required(login_url='/login/')
+def reserve_seats(request, theater_id):
+    """
+    API endpoint to temporarily reserve selected seats for 2 minutes using Django transactions.
+    Supports atomic locking (select_for_update) to prevent race conditions.
+    """
+    if request.method != 'POST':
+        return HttpResponseBadRequest("POST request required.")
+        
+    theater = get_object_or_404(Theater, id=theater_id)
+    
+    try:
+        data = json.loads(request.body.decode('utf-8')) if request.body else request.POST
+        seat_ids = data.get('seat_ids', [])
+        if isinstance(seat_ids, str):
+            seat_ids = [int(s) for s in seat_ids.split(',') if s.strip().isdigit()]
+    except Exception:
+        seat_ids = request.POST.getlist('seats')
+        
+    if not seat_ids:
+        return JsonResponse({'success': False, 'error': 'No seats were selected.'}, status=400)
+        
+    seat_ids = [int(sid) for sid in seat_ids]
+    now = timezone.now()
+    reserved_until = now + timedelta(seconds=120)
+    
+    with transaction.atomic():
+        # Clear any expired reservations first
+        Seat.objects.filter(
+            theater=theater,
+            is_booked=False,
+            reserved_until__lte=now
+        ).update(reserved_by=None, reserved_until=None)
+        
+        # Lock requested seats using select_for_update()
+        target_seats = list(
+            Seat.objects.select_for_update()
+            .filter(theater=theater, id__in=seat_ids)
+        )
+        
+        if len(target_seats) != len(seat_ids):
+            return JsonResponse({'success': False, 'error': 'One or more invalid seat IDs provided.'}, status=400)
+            
+        # Check availability for each requested seat
+        conflict_seats = []
+        for seat in target_seats:
+            if seat.is_booked:
+                conflict_seats.append(f"Seat {seat.seat_number} (already booked)")
+            elif seat.reserved_until and seat.reserved_until > now and seat.reserved_by != request.user:
+                conflict_seats.append(f"Seat {seat.seat_number} (reserved by another user)")
+                
+        if conflict_seats:
+            return JsonResponse({
+                'success': False,
+                'error': f"Cannot reserve: {', '.join(conflict_seats)}. Please choose available seats."
+            }, status=409)
+            
+        # Release any OTHER seats previously reserved by this user in this theater
+        Seat.objects.filter(
+            theater=theater,
+            reserved_by=request.user
+        ).exclude(id__in=seat_ids).update(reserved_by=None, reserved_until=None)
+        
+        # Lock requested seats for 2 minutes
+        for seat in target_seats:
+            seat.reserved_by = request.user
+            seat.reserved_until = reserved_until
+            seat.save(update_fields=['reserved_by', 'reserved_until'])
+            
+    return JsonResponse({
+        'success': True,
+        'message': f"Reserved {len(target_seats)} seat(s) for 2 minutes.",
+        'remaining_seconds': 120,
+        'reserved_until': reserved_until.isoformat(),
+        'seat_ids': seat_ids,
+    })
+
+@login_required(login_url='/login/')
+def release_user_seats(request, theater_id):
+    """API endpoint to release currently reserved seats for the requesting user."""
+    if request.method != 'POST':
+        return HttpResponseBadRequest("POST request required.")
+        
+    theater = get_object_or_404(Theater, id=theater_id)
+    with transaction.atomic():
+        Seat.objects.filter(
+            theater=theater,
+            reserved_by=request.user,
+            is_booked=False
+        ).update(reserved_by=None, reserved_until=None)
+        
+    return JsonResponse({
+        'success': True,
+        'message': 'Released seat reservation successfully.'
+    })
+
+@login_required(login_url='/login/')
+def confirm_booking(request, theater_id):
+    """
+    Finalizes seat booking after payment/confirmation.
+    Uses select_for_update transaction locking to ensure consistency.
+    """
+    if request.method != 'POST':
+        return HttpResponseBadRequest("POST request required.")
+        
+    theater = get_object_or_404(Theater, id=theater_id)
+    
+    try:
+        data = json.loads(request.body.decode('utf-8')) if request.body else request.POST
+        seat_ids = data.get('seat_ids', [])
+        if isinstance(seat_ids, str):
+            seat_ids = [int(s) for s in seat_ids.split(',') if s.strip().isdigit()]
+    except Exception:
+        seat_ids = request.POST.getlist('seats')
+        
+    now = timezone.now()
+    
+    with transaction.atomic():
+        # Fetch seats reserved by user
+        if not seat_ids:
+            reserved_seats = list(
+                Seat.objects.select_for_update()
+                .filter(theater=theater, reserved_by=request.user, reserved_until__gt=now, is_booked=False)
+            )
+        else:
+            seat_ids = [int(sid) for sid in seat_ids]
+            reserved_seats = list(
+                Seat.objects.select_for_update()
+                .filter(theater=theater, id__in=seat_ids)
+            )
+            
+        if not reserved_seats:
+            return JsonResponse({
+                'success': False,
+                'error': 'Reservation expired or no valid seats selected. Please re-select your seats.'
+            }, status=400)
+            
+        # Verify ownership & non-expired status
+        expired_or_invalid = []
+        for seat in reserved_seats:
+            if seat.is_booked:
+                expired_or_invalid.append(f"Seat {seat.seat_number} is already booked.")
+            elif seat.reserved_by != request.user or not seat.reserved_until or seat.reserved_until <= now:
+                expired_or_invalid.append(f"Reservation for Seat {seat.seat_number} has expired.")
+                
+        if expired_or_invalid:
+            return JsonResponse({
+                'success': False,
+                'error': f"Booking failed: {', '.join(expired_or_invalid)}"
+            }, status=409)
+            
+        created_bookings = []
+        for seat in reserved_seats:
+            booking, created = Booking.objects.get_or_create(
+                user=request.user,
+                seat=seat,
+                movie=theater.movie,
+                theater=theater
+            )
+            seat.is_booked = True
+            seat.reserved_by = None
+            seat.reserved_until = None
+            seat.save(update_fields=['is_booked', 'reserved_by', 'reserved_until'])
+            created_bookings.append(seat.seat_number)
+            
+    messages.success(request, f"Successfully booked seat(s): {', '.join(created_bookings)}!")
+    return JsonResponse({
+        'success': True,
+        'redirect_url': '/users/profile/',
+        'message': f"Successfully booked {len(created_bookings)} seat(s)!"
+    })
+
 @login_required(login_url='/login/')
 def book_seats(request, theater_id):
     theaters = get_object_or_404(Theater, id=theater_id)
-    seats = Seat.objects.filter(theater=theaters)
+    auto_release_expired_seats(theater_id)
+    
     if request.method == 'POST':
         selected_Seats = request.POST.getlist('seats')
-        error_seats = []
         if not selected_Seats:
-            return render(request, "movies/seat_selection.html", {'theater': theaters, 'theaters': theaters, "seats": seats, 'error': "No seat selected"})
-        for seat_id in selected_Seats:
-            seat = get_object_or_404(Seat, id=seat_id, theater=theaters)
-            if seat.is_booked:
-                error_seats.append(seat.seat_number)
-                continue
-            try:
-                Booking.objects.create(
-                    user=request.user,
-                    seat=seat,
-                    movie=theaters.movie,
-                    theater=theaters
-                )
-                seat.is_booked = True
-                seat.save()
-            except IntegrityError:
-                error_seats.append(seat.seat_number)
+            seats = Seat.objects.filter(theater=theaters).order_by('id')
+            return render(request, "movies/seat_selection.html", {
+                'theater': theaters, 'theaters': theaters, "seats": seats, 'error': "No seat selected"
+            })
+            
+        now = timezone.now()
+        seat_ids = [int(s) for s in selected_Seats]
+        error_seats = []
+        
+        with transaction.atomic():
+            seats_to_book = list(
+                Seat.objects.select_for_update().filter(theater=theaters, id__in=seat_ids)
+            )
+            for seat in seats_to_book:
+                if seat.is_booked or (seat.reserved_until and seat.reserved_until > now and seat.reserved_by != request.user):
+                    error_seats.append(seat.seat_number)
+                    continue
+                try:
+                    Booking.objects.create(
+                        user=request.user,
+                        seat=seat,
+                        movie=theaters.movie,
+                        theater=theaters
+                    )
+                    seat.is_booked = True
+                    seat.reserved_by = None
+                    seat.reserved_until = None
+                    seat.save()
+                except IntegrityError:
+                    error_seats.append(seat.seat_number)
+                    
+        seats = Seat.objects.filter(theater=theaters).order_by('id')
         if error_seats:
-            error_message = f"The following seats are already booked: {', '.join(error_seats)}"
-            return render(request, 'movies/seat_selection.html', {'theater': theaters, 'theaters': theaters, "seats": seats, 'error': error_message})
+            error_message = f"The following seats are unavailable: {', '.join(error_seats)}"
+            return render(request, 'movies/seat_selection.html', {
+                'theater': theaters, 'theaters': theaters, "seats": seats, 'error': error_message
+            })
+        messages.success(request, "Your seats have been booked successfully!")
         return redirect('profile')
-    return render(request, 'movies/seat_selection.html', {'theaters': theaters, "seats": seats})
+        
+    seats = Seat.objects.filter(theater=theaters).order_by('id')
+    return render(request, 'movies/seat_selection.html', {'theaters': theaters, 'theater': theaters, "seats": seats})
 
 @login_required(login_url='/login/')
 def custom_admin_dashboard(request):

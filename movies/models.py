@@ -2,6 +2,7 @@ import re
 from django.db import models
 from django.contrib.auth.models import User 
 from django.db.models import Avg
+from django.utils import timezone
 
 class Genre(models.Model):
     name = models.CharField(max_length=100, unique=True)
@@ -122,9 +123,51 @@ class Seat(models.Model):
     theater = models.ForeignKey(Theater, on_delete=models.CASCADE, related_name='seats')
     seat_number = models.CharField(max_length=10)
     is_booked = models.BooleanField(default=False)
+    reserved_by = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL, related_name='reserved_seats')
+    reserved_until = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):
         return f'{self.seat_number} in {self.theater.name}'
+
+    def is_currently_reserved(self):
+        """Returns True if seat is currently held under active temporary reservation."""
+        if self.is_booked:
+            return False
+        if self.reserved_until and self.reserved_until > timezone.now():
+            return True
+        return False
+
+    def is_reserved_by(self, user):
+        """Returns True if active reservation belongs to specified user."""
+        if not user or not user.is_authenticated:
+            return False
+        return self.is_currently_reserved() and self.reserved_by == user
+
+    def release_if_expired(self):
+        """Clears reservation if expired."""
+        if self.reserved_until and self.reserved_until <= timezone.now() and not self.is_booked:
+            self.reserved_by = None
+            self.reserved_until = None
+            self.save(update_fields=['reserved_by', 'reserved_until'])
+            return True
+        return False
+
+    def get_status(self, user=None):
+        """Returns status string: 'booked', 'reserved_by_you', 'reserved_by_other', or 'available'."""
+        if self.is_booked:
+            return 'booked'
+        if self.is_currently_reserved():
+            if user and user.is_authenticated and self.reserved_by == user:
+                return 'reserved_by_you'
+            return 'reserved_by_other'
+        return 'available'
+
+    def get_remaining_seconds(self):
+        """Returns remaining seconds for active reservation or 0."""
+        if self.is_currently_reserved() and self.reserved_until:
+            delta = (self.reserved_until - timezone.now()).total_seconds()
+            return max(0, int(delta))
+        return 0
 
 class Booking(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
