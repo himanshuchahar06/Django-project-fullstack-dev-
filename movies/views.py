@@ -10,8 +10,9 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib import messages
 from django.db import IntegrityError, transaction
-from django.db.models import Q, Count, Sum, Avg, F, FloatField, ExpressionWrapper
+from django.db.models import Q, Count, Sum, Avg, Min, Max, F, FloatField, ExpressionWrapper
 from django.db.models.functions import TruncDay, TruncMonth, ExtractHour
+from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 from django.http import JsonResponse, HttpResponseBadRequest, HttpResponse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
@@ -19,42 +20,214 @@ from django.conf import settings
 from django.contrib.auth.models import User
 from .models import (
     Movie, Theater, Seat, Booking, Genre, Language, 
-    CastMember, MoviePoster, Review, ReviewReport, PaymentTransaction
+    CastMember, MoviePoster, Review, ReviewReport, PaymentTransaction,
+    RecentlyViewedMovie
 )
 from .forms import (
     ReviewForm, ReviewReportForm, MovieForm, GenreForm, 
     LanguageForm, CastMemberForm, TheaterForm
 )
 
+def get_personalized_recommendations(request):
+    """
+    Generates personalized movie recommendations based on:
+    1. Genres & languages of movies the user has booked
+    2. User's recently viewed movies
+    3. Fallback to top-rated / trending movies
+    """
+    preferred_genre_ids = set()
+    preferred_lang_ids = set()
+    excluded_movie_ids = set()
+
+    if request.user.is_authenticated:
+        user = request.user
+        booked_ids = set(Booking.objects.filter(user=user).values_list('movie_id', flat=True))
+        excluded_movie_ids.update(booked_ids)
+
+        booked_movies = Movie.objects.filter(id__in=booked_ids).prefetch_related('genres', 'languages')
+        for m in booked_movies:
+            preferred_genre_ids.update(m.genres.values_list('id', flat=True))
+            preferred_lang_ids.update(m.languages.values_list('id', flat=True))
+
+        recent_views = RecentlyViewedMovie.objects.filter(user=user).select_related('movie').prefetch_related('movie__genres', 'movie__languages')[:5]
+        for rv in recent_views:
+            preferred_genre_ids.update(rv.movie.genres.values_list('id', flat=True))
+            preferred_lang_ids.update(rv.movie.languages.values_list('id', flat=True))
+    else:
+        session_rv_ids = request.session.get('recently_viewed_movie_ids', [])
+        if session_rv_ids:
+            recent_movies = Movie.objects.filter(id__in=session_rv_ids[:5]).prefetch_related('genres', 'languages')
+            for m in recent_movies:
+                preferred_genre_ids.update(m.genres.values_list('id', flat=True))
+                preferred_lang_ids.update(m.languages.values_list('id', flat=True))
+
+    recommended_list = []
+    if preferred_genre_ids or preferred_lang_ids:
+        rec_qs = Movie.objects.filter(
+            Q(genres__id__in=preferred_genre_ids) | Q(languages__id__in=preferred_lang_ids)
+        ).exclude(id__in=excluded_movie_ids).distinct().order_by('-rating', '-release_date')[:6]
+        recommended_list = list(rec_qs)
+
+    rec_ids = {m.id for m in recommended_list}
+    if len(recommended_list) < 6:
+        needed = 6 - len(recommended_list)
+        fallback = list(Movie.objects.exclude(id__in=excluded_movie_ids).exclude(id__in=rec_ids).order_by('-is_trending', '-rating', '-release_date')[:needed])
+        recommended_list.extend(fallback)
+
+    return recommended_list[:6]
+
 def movie_list(request):
-    search_query = request.GET.get('search')
-    genre_slug = request.GET.get('genre')
-    language_code = request.GET.get('language')
+    search_query = request.GET.get('search', '').strip()
+    genre_filter = request.GET.get('genre', '').strip()
+    language_filter = request.GET.get('language', '').strip()
+    city_filter = request.GET.get('city', '').strip()
+    theater_filter = request.GET.get('theater', '').strip()
+    release_filter = request.GET.get('release_date', '').strip()
+    rating_filter = request.GET.get('min_rating', '').strip()
+    show_time_filter = request.GET.get('show_time', '').strip()
+    sort_option = request.GET.get('sort', 'newest').strip()
 
-    movies = Movie.objects.all().prefetch_related('genres', 'languages')
+    movies = Movie.objects.all().prefetch_related('genres', 'languages', 'theaters')
 
+    # 1. Search Filter (Title, Description, Cast)
     if search_query:
         movies = movies.filter(
             Q(name__icontains=search_query) |
             Q(description__icontains=search_query) |
             Q(cast__icontains=search_query)
         )
-    if genre_slug:
-        movies = movies.filter(genres__slug=genre_slug)
-    if language_code:
-        movies = movies.filter(languages__code=language_code)
 
+    # 2. Genre Filter
+    if genre_filter:
+        if genre_filter.isdigit():
+            movies = movies.filter(genres__id=int(genre_filter))
+        else:
+            movies = movies.filter(genres__slug=genre_filter)
+
+    # 3. Language Filter
+    if language_filter:
+        if language_filter.isdigit():
+            movies = movies.filter(languages__id=int(language_filter))
+        else:
+            movies = movies.filter(languages__code=language_filter)
+
+    # 4. City / Location Filter
+    if city_filter:
+        movies = movies.filter(theaters__location__icontains=city_filter)
+
+    # 5. Theater Filter
+    if theater_filter:
+        if theater_filter.isdigit():
+            movies = movies.filter(theaters__id=int(theater_filter))
+        else:
+            movies = movies.filter(theaters__name__icontains=theater_filter)
+
+    # 6. Release Date Filter
+    today = timezone.now().date()
+    if release_filter == 'upcoming':
+        movies = movies.filter(release_date__gt=today)
+    elif release_filter == 'now_showing':
+        movies = movies.filter(release_date__lte=today)
+    elif release_filter == 'this_month':
+        movies = movies.filter(release_date__month=today.month, release_date__year=today.year)
+    elif release_filter:
+        try:
+            parsed_date = datetime.strptime(release_filter, '%Y-%m-%d').date()
+            movies = movies.filter(release_date=parsed_date)
+        except ValueError:
+            pass
+
+    # 7. Rating Filter
+    if rating_filter:
+        try:
+            min_r = float(rating_filter)
+            movies = movies.filter(rating__gte=min_r)
+        except ValueError:
+            pass
+
+    # 8. Show Timings Filter
+    if show_time_filter == 'morning':
+        movies = movies.filter(theaters__time__hour__gte=6, theaters__time__hour__lt=12)
+    elif show_time_filter == 'afternoon':
+        movies = movies.filter(theaters__time__hour__gte=12, theaters__time__hour__lt=17)
+    elif show_time_filter == 'evening':
+        movies = movies.filter(theaters__time__hour__gte=17, theaters__time__hour__lt=21)
+    elif show_time_filter == 'night':
+        movies = movies.filter(Q(theaters__time__hour__gte=21) | Q(theaters__time__hour__lt=4))
+
+    # Distinct query set before sorting
+    movies = movies.distinct()
+
+    # 9. Sorting
+    if sort_option == 'popularity':
+        movies = movies.annotate(booking_count=Count('booking')).order_by('-booking_count', '-is_trending', '-rating', '-id')
+    elif sort_option == 'rating':
+        movies = movies.order_by('-rating', '-release_date', '-id')
+    elif sort_option == 'price_asc':
+        movies = movies.annotate(min_price=Min('theaters__ticket_price')).order_by('min_price', '-rating', '-id')
+    elif sort_option == 'price_desc':
+        movies = movies.annotate(min_price=Min('theaters__ticket_price')).order_by('-min_price', '-rating', '-id')
+    else: # Default: newest releases
+        movies = movies.order_by('-release_date', '-id')
+
+    # Matching Count
+    matching_count = movies.count()
+
+    # 10. Pagination (12 movies per page)
+    paginator = Paginator(movies, 12)
+    page_number = request.GET.get('page', 1)
+    try:
+        page_obj = paginator.page(page_number)
+    except PageNotAnInteger:
+        page_obj = paginator.page(1)
+    except EmptyPage:
+        page_obj = paginator.page(paginator.num_pages)
+
+    # Context Data
     genres = Genre.objects.all()
     languages = Language.objects.all()
+    cities = Theater.objects.values_list('location', flat=True).distinct().exclude(location__isnull=True).exclude(location='')
+    theaters = Theater.objects.values('id', 'name', 'location').distinct()
+    recommended_movies = get_personalized_recommendations(request)
 
-    return render(request, 'movies/movie_list.html', {
-        'movies': movies.distinct(),
+    # Recently Viewed Movies
+    recently_viewed_movies = []
+    if request.user.is_authenticated:
+        recent_rvs = RecentlyViewedMovie.objects.filter(user=request.user).select_related('movie')[:6]
+        recently_viewed_movies = [rv.movie for rv in recent_rvs]
+    else:
+        session_rv_ids = request.session.get('recently_viewed_movie_ids', [])
+        if session_rv_ids:
+            recently_viewed_movies = list(Movie.objects.filter(id__in=session_rv_ids[:6]))
+
+    # Construct query string excluding 'page' for clean pagination links
+    query_params = request.GET.copy()
+    if 'page' in query_params:
+        del query_params['page']
+    querystring = query_params.urlencode()
+
+    context = {
+        'page_obj': page_obj,
+        'movies': page_obj.object_list,
+        'matching_count': matching_count,
         'genres': genres,
         'languages': languages,
-        'selected_genre': genre_slug,
-        'selected_language': language_code,
+        'cities': sorted(list(set(cities))),
+        'theaters': theaters,
+        'recommended_movies': recommended_movies,
+        'recently_viewed_movies': recently_viewed_movies,
         'search_query': search_query,
-    })
+        'selected_genre': genre_filter,
+        'selected_language': language_filter,
+        'selected_city': city_filter,
+        'selected_theater': theater_filter,
+        'selected_release_date': release_filter,
+        'selected_min_rating': rating_filter,
+        'selected_show_time': show_time_filter,
+        'selected_sort': sort_option,
+        'querystring': querystring,
+    }
+    return render(request, 'movies/movie_list.html', context)
 
 def movie_detail(request, movie_id):
     movie = get_object_or_404(
@@ -64,6 +237,21 @@ def movie_detail(request, movie_id):
         ),
         id=movie_id
     )
+    
+    # Track Recently Viewed Movie
+    if request.user.is_authenticated:
+        RecentlyViewedMovie.objects.update_or_create(
+            user=request.user,
+            movie=movie,
+            defaults={'viewed_at': timezone.now()}
+        )
+    else:
+        rv_list = request.session.get('recently_viewed_movie_ids', [])
+        if movie.id in rv_list:
+            rv_list.remove(movie.id)
+        rv_list.insert(0, movie.id)
+        request.session['recently_viewed_movie_ids'] = rv_list[:10]
+        request.session.modified = True
     
     has_booked = False
     user_review = None

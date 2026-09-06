@@ -63,6 +63,12 @@ class Movie(models.Model):
 
     class Meta:
         ordering = ['-release_date', 'name']
+        indexes = [
+            models.Index(fields=['rating']),
+            models.Index(fields=['release_date']),
+            models.Index(fields=['name']),
+            models.Index(fields=['is_trending']),
+        ]
 
     def __str__(self):
         return self.name
@@ -261,3 +267,18 @@ class ReviewReport(models.Model):
 
     def __str__(self):
         return f'Report on review #{self.review.id} by {self.reported_by.username}'
+
+class RecentlyViewedMovie(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='recently_viewed_movies')
+    movie = models.ForeignKey(Movie, on_delete=models.CASCADE, related_name='recent_views')
+    viewed_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-viewed_at']
+        unique_together = ('user', 'movie')
+        indexes = [
+            models.Index(fields=['user', '-viewed_at']),
+        ]
+
+    def __str__(self):
+        return f'{self.user.username} viewed {self.movie.name} at {self.viewed_at}'

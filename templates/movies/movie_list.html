@@ -1,6 +1,6 @@
 {% extends "users/basic.html" %}
 
-{% block title %}Explore Movies | BookMySeat{% endblock %}
+{% block title %}Movie Discovery & Recommendations | BookMySeat{% endblock %}
 
 {% block content %}
 <style>
@@ -17,29 +17,130 @@
     box-shadow: 0 12px 24px rgba(0,0,0,0.5);
     border-color: #38bdf8;
   }
+  .rec-card {
+    background: linear-gradient(135deg, #1e1b4b 0%, #1e293b 100%);
+    border: 1px solid #6366f1;
+    border-radius: 12px;
+    overflow: hidden;
+    transition: all 0.3s ease;
+  }
+  .rec-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 20px rgba(99, 102, 241, 0.4);
+    border-color: #818cf8;
+  }
   .badge-cert { background: #e11d48; color: white; font-weight: 700; font-size: 0.75rem; padding: 4px 8px; border-radius: 4px; }
   .badge-pill-custom { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #cbd5e1; font-size: 0.75rem; padding: 2px 8px; border-radius: 12px; }
+  .filter-panel { background: #1e293b; border: 1px solid #334155; border-radius: 12px; }
+  .match-badge { background: #0284c7; color: white; font-weight: 600; padding: 6px 14px; border-radius: 20px; font-size: 0.88rem; }
+  .pagination .page-link { background-color: #1e293b; border-color: #334155; color: #f8fafc; }
+  .pagination .page-item.active .page-link { background-color: #0284c7; border-color: #0284c7; color: white; }
+  .pagination .page-link:hover { background-color: #334155; color: #38bdf8; }
 </style>
 
 <div class="container py-4">
+  <!-- Page Header -->
   <div class="text-center mb-4">
-    <h1 class="display-4 font-weight-bold text-white mb-2">Explore Movies</h1>
-    <p class="text-slate-400">Discover trending titles, watch trailers, read verified audience reviews, and book seats.</p>
+    <h1 class="display-4 font-weight-bold text-white mb-2"><i class="fas fa-compass text-info mr-2"></i>Explore & Discover Movies</h1>
+    <p class="text-slate-400">Search by title, filter by location, showtimes, and ratings, and discover movies personalized for you.</p>
   </div>
 
-  <!-- Search & Filters -->
-  <div class="card bg-dark border-secondary p-3 mb-4 rounded-lg">
-    <form method="GET" action="{% url 'movie_list' %}">
-      <div class="row align-items-center">
-        <div class="col-md-5 mb-2 mb-md-0">
-          <div class="input-group">
-            <input type="text" class="form-control bg-dark text-light border-secondary" name="search" placeholder="Search by title, description, cast..." value="{{ search_query|default_if_none:'' }}">
-            <div class="input-group-append">
-              <button class="btn btn-primary" type="submit"><i class="fas fa-search"></i></button>
+  <!-- Recommended For You Section -->
+  {% if recommended_movies %}
+  <div class="mb-5">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h3 class="h4 font-weight-bold text-white mb-0">
+        <i class="fas fa-magic text-warning mr-2"></i>Recommended for You
+      </h3>
+      <span class="badge badge-pill badge-primary px-3 py-2" style="background: linear-gradient(90deg, #6366f1, #a855f7);">
+        Based on your bookings & views
+      </span>
+    </div>
+    <div class="row">
+      {% for movie in recommended_movies %}
+        <div class="col-lg-2 col-md-3 col-sm-4 col-6 mb-3">
+          <div class="rec-card h-100 d-flex flex-column">
+            <a href="{% url 'movie_detail' movie.id %}">
+              {% if movie.image %}
+                <img src="{{ movie.image.url }}" class="card-img-top" alt="{{ movie.name }}" style="height: 180px; object-fit: cover;">
+              {% else %}
+                <div class="bg-secondary d-flex align-items-center justify-content-center text-white" style="height: 180px;">
+                  <i class="fas fa-film fa-2x"></i>
+                </div>
+              {% endif %}
+            </a>
+            <div class="p-2 d-flex flex-column flex-grow-1 justify-content-between">
+              <div>
+                <span class="text-warning font-weight-bold extra-small"><i class="fas fa-star mr-1"></i>{{ movie.rating }}</span>
+                <h6 class="font-weight-bold text-white mb-1 text-truncate" title="{{ movie.name }}">
+                  <a href="{% url 'movie_detail' movie.id %}" class="text-white text-decoration-none">{{ movie.name }}</a>
+                </h6>
+              </div>
+              <a href="{% url 'movie_detail' movie.id %}" class="btn btn-outline-info btn-block btn-xs py-1 text-nowrap" style="font-size: 0.75rem;">
+                Explore
+              </a>
             </div>
           </div>
         </div>
-        <div class="col-md-3 mb-2 mb-md-0">
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Recently Viewed Section -->
+  {% if recently_viewed_movies %}
+  <div class="mb-4">
+    <h5 class="font-weight-bold text-white mb-3"><i class="fas fa-history text-secondary mr-2"></i>Recently Viewed</h5>
+    <div class="row">
+      {% for movie in recently_viewed_movies %}
+        <div class="col-lg-2 col-md-3 col-sm-4 col-6 mb-3">
+          <div class="movie-card h-100 d-flex flex-column p-2">
+            <a href="{% url 'movie_detail' movie.id %}" class="text-decoration-none">
+              <div class="d-flex align-items-center">
+                {% if movie.image %}
+                  <img src="{{ movie.image.url }}" alt="{{ movie.name }}" class="rounded mr-2" style="width: 40px; height: 55px; object-fit: cover;">
+                {% else %}
+                  <div class="bg-secondary rounded mr-2 d-flex align-items-center justify-content-center text-white" style="width: 40px; height: 55px;">
+                    <i class="fas fa-film"></i>
+                  </div>
+                {% endif %}
+                <div class="overflow-hidden">
+                  <h6 class="text-white font-weight-bold mb-0 text-truncate" style="font-size: 0.85rem;">{{ movie.name }}</h6>
+                  <span class="text-warning extra-small"><i class="fas fa-star mr-1"></i>{{ movie.rating }}</span>
+                </div>
+              </div>
+            </a>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Search & Multi-Faceted Filters Panel -->
+  <div class="filter-panel p-4 mb-4">
+    <form method="GET" action="{% url 'movie_list' %}" id="discoveryFilterForm">
+      <!-- Search Title Bar -->
+      <div class="row mb-3">
+        <div class="col-md-9 mb-2 mb-md-0">
+          <div class="input-group">
+            <div class="input-group-prepend">
+              <span class="input-group-text bg-dark border-secondary text-light"><i class="fas fa-search"></i></span>
+            </div>
+            <input type="text" class="form-control bg-dark text-light border-secondary" name="search" placeholder="Search movies by title, cast, description..." value="{{ search_query }}">
+          </div>
+        </div>
+        <div class="col-md-3 d-flex">
+          <button class="btn btn-primary font-weight-bold flex-grow-1 mr-2" type="submit"><i class="fas fa-filter mr-1"></i> Apply Filters</button>
+          <a href="{% url 'movie_list' %}" class="btn btn-outline-secondary text-white" title="Reset All Filters"><i class="fas fa-redo"></i></a>
+        </div>
+      </div>
+
+      <!-- Advanced Filter Controls Grid -->
+      <div class="row">
+        <!-- Genre Filter -->
+        <div class="col-lg-3 col-md-4 col-sm-6 mb-3">
+          <label class="text-slate-300 small font-weight-bold"><i class="fas fa-tags mr-1 text-info"></i>Genre</label>
           <select name="genre" class="form-control bg-dark text-light border-secondary" onchange="this.form.submit()">
             <option value="">All Genres</option>
             {% for g in genres %}
@@ -47,7 +148,10 @@
             {% endfor %}
           </select>
         </div>
-        <div class="col-md-3 mb-2 mb-md-0">
+
+        <!-- Language Filter -->
+        <div class="col-lg-3 col-md-4 col-sm-6 mb-3">
+          <label class="text-slate-300 small font-weight-bold"><i class="fas fa-language mr-1 text-info"></i>Language</label>
           <select name="language" class="form-control bg-dark text-light border-secondary" onchange="this.form.submit()">
             <option value="">All Languages</option>
             {% for l in languages %}
@@ -55,11 +159,89 @@
             {% endfor %}
           </select>
         </div>
-        <div class="col-md-1">
-          <a href="{% url 'movie_list' %}" class="btn btn-outline-secondary btn-block text-white" title="Reset filters"><i class="fas fa-redo"></i></a>
+
+        <!-- City / Location Filter -->
+        <div class="col-lg-3 col-md-4 col-sm-6 mb-3">
+          <label class="text-slate-300 small font-weight-bold"><i class="fas fa-map-marker-alt mr-1 text-info"></i>City / Location</label>
+          <select name="city" class="form-control bg-dark text-light border-secondary" onchange="this.form.submit()">
+            <option value="">All Cities</option>
+            {% for c in cities %}
+              <option value="{{ c }}" {% if selected_city == c %}selected{% endif %}>{{ c }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <!-- Theater Filter -->
+        <div class="col-lg-3 col-md-4 col-sm-6 mb-3">
+          <label class="text-slate-300 small font-weight-bold"><i class="fas fa-building mr-1 text-info"></i>Theater</label>
+          <select name="theater" class="form-control bg-dark text-light border-secondary" onchange="this.form.submit()">
+            <option value="">All Theaters</option>
+            {% for th in theaters %}
+              <option value="{{ th.id }}" {% if selected_theater == th.id|stringformat:"s" %}selected{% endif %}>{{ th.name }} ({{ th.location }})</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <!-- Release Date Filter -->
+        <div class="col-lg-3 col-md-4 col-sm-6 mb-3">
+          <label class="text-slate-300 small font-weight-bold"><i class="fas fa-calendar-alt mr-1 text-info"></i>Release Date</label>
+          <select name="release_date" class="form-control bg-dark text-light border-secondary" onchange="this.form.submit()">
+            <option value="">All Release Dates</option>
+            <option value="now_showing" {% if selected_release_date == 'now_showing' %}selected{% endif %}>Now Showing</option>
+            <option value="upcoming" {% if selected_release_date == 'upcoming' %}selected{% endif %}>Upcoming Releases</option>
+            <option value="this_month" {% if selected_release_date == 'this_month' %}selected{% endif %}>Released This Month</option>
+          </select>
+        </div>
+
+        <!-- Minimum Rating Filter -->
+        <div class="col-lg-3 col-md-4 col-sm-6 mb-3">
+          <label class="text-slate-300 small font-weight-bold"><i class="fas fa-star mr-1 text-info"></i>Min Rating</label>
+          <select name="min_rating" class="form-control bg-dark text-light border-secondary" onchange="this.form.submit()">
+            <option value="">Any Rating</option>
+            <option value="9" {% if selected_min_rating == '9' %}selected{% endif %}>9.0+ ⭐</option>
+            <option value="8" {% if selected_min_rating == '8' %}selected{% endif %}>8.0+ ⭐</option>
+            <option value="7" {% if selected_min_rating == '7' %}selected{% endif %}>7.0+ ⭐</option>
+            <option value="6" {% if selected_min_rating == '6' %}selected{% endif %}>6.0+ ⭐</option>
+          </select>
+        </div>
+
+        <!-- Show Timings Filter -->
+        <div class="col-lg-3 col-md-4 col-sm-6 mb-3">
+          <label class="text-slate-300 small font-weight-bold"><i class="fas fa-clock mr-1 text-info"></i>Show Timing</label>
+          <select name="show_time" class="form-control bg-dark text-light border-secondary" onchange="this.form.submit()">
+            <option value="">All Showtimes</option>
+            <option value="morning" {% if selected_show_time == 'morning' %}selected{% endif %}>Morning (6 AM - 12 PM)</option>
+            <option value="afternoon" {% if selected_show_time == 'afternoon' %}selected{% endif %}>Afternoon (12 PM - 5 PM)</option>
+            <option value="evening" {% if selected_show_time == 'evening' %}selected{% endif %}>Evening (5 PM - 9 PM)</option>
+            <option value="night" {% if selected_show_time == 'night' %}selected{% endif %}>Night (9 PM - 4 AM)</option>
+          </select>
+        </div>
+
+        <!-- Sorting Options -->
+        <div class="col-lg-3 col-md-4 col-sm-6 mb-3">
+          <label class="text-slate-300 small font-weight-bold"><i class="fas fa-sort-amount-down mr-1 text-info"></i>Sort By</label>
+          <select name="sort" class="form-control bg-dark text-light border-secondary" onchange="this.form.submit()">
+            <option value="newest" {% if selected_sort == 'newest' %}selected{% endif %}>Newest Releases</option>
+            <option value="popularity" {% if selected_sort == 'popularity' %}selected{% endif %}>Most Popular / Booked</option>
+            <option value="rating" {% if selected_sort == 'rating' %}selected{% endif %}>Highest Rating</option>
+            <option value="price_asc" {% if selected_sort == 'price_asc' %}selected{% endif %}>Ticket Price: Low to High</option>
+            <option value="price_desc" {% if selected_sort == 'price_desc' %}selected{% endif %}>Ticket Price: High to Low</option>
+          </select>
         </div>
       </div>
     </form>
+  </div>
+
+  <!-- Dynamic Results Header Bar -->
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <div class="match-badge">
+      <i class="fas fa-film mr-2"></i>Matching Movies: <strong>{{ matching_count }}</strong>
+    </div>
+    {% if querystring %}
+      <a href="{% url 'movie_list' %}" class="btn btn-sm btn-outline-warning text-white">
+        <i class="fas fa-times-circle mr-1"></i>Clear Active Filters
+      </a>
+    {% endif %}
   </div>
 
   <!-- Movies Grid -->
@@ -82,7 +264,7 @@
                 <span class="badge-cert">{{ movie.age_certification }}</span>
                 <span class="text-warning font-weight-bold small"><i class="fas fa-star mr-1"></i>{{ movie.rating }} / 10</span>
               </div>
-              <h5 class="font-weight-bold text-white mb-2 text-truncate">
+              <h5 class="font-weight-bold text-white mb-2 text-truncate" title="{{ movie.name }}">
                 <a href="{% url 'movie_detail' movie.id %}" class="text-white text-decoration-none">{{ movie.name }}</a>
               </h5>
               <div class="mb-2">
@@ -107,10 +289,49 @@
       <div class="col-12 text-center py-5">
         <i class="fas fa-search fa-3x text-muted mb-3 d-block"></i>
         <h4 class="text-white font-weight-bold">No movies found matching your criteria</h4>
-        <p class="text-muted">Try clearing your search query or selecting a different genre/language filter.</p>
-        <a href="{% url 'movie_list' %}" class="btn btn-outline-primary mt-2">View All Movies</a>
+        <p class="text-muted">Try clearing your search query or selecting different genre, language, city, or date filters.</p>
+        <a href="{% url 'movie_list' %}" class="btn btn-outline-primary mt-2"><i class="fas fa-redo mr-1"></i>View All Movies</a>
       </div>
     {% endfor %}
   </div>
+
+  <!-- Pagination Controls -->
+  {% if page_obj.has_other_pages %}
+  <nav class="mt-4 d-flex justify-content-center">
+    <ul class="pagination">
+      {% if page_obj.has_previous %}
+        <li class="page-item">
+          <a class="page-link" href="?{{ querystring }}&page=1" title="First Page">&laquo; First</a>
+        </li>
+        <li class="page-item">
+          <a class="page-link" href="?{{ querystring }}&page={{ page_obj.previous_page_number }}">Previous</a>
+        </li>
+      {% else %}
+        <li class="page-item disabled"><span class="page-link">&laquo; First</span></li>
+        <li class="page-item disabled"><span class="page-link">Previous</span></li>
+      {% endif %}
+
+      {% for i in page_obj.paginator.page_range %}
+        {% if page_obj.number == i %}
+          <li class="page-item active"><span class="page-link">{{ i }}</span></li>
+        {% elif i > page_obj.number|add:'-3' and i < page_obj.number|add:'3' %}
+          <li class="page-item"><a class="page-link" href="?{{ querystring }}&page={{ i }}">{{ i }}</a></li>
+        {% endif %}
+      {% endfor %}
+
+      {% if page_obj.has_next %}
+        <li class="page-item">
+          <a class="page-link" href="?{{ querystring }}&page={{ page_obj.next_page_number }}">Next</a>
+        </li>
+        <li class="page-item">
+          <a class="page-link" href="?{{ querystring }}&page={{ page_obj.paginator.num_pages }}" title="Last Page">Last &raquo;</a>
+        </li>
+      {% else %}
+        <li class="page-item disabled"><span class="page-link">Next</span></li>
+        <li class="page-item disabled"><span class="page-link">Last &raquo;</span></li>
+      {% endif %}
+    </ul>
+  </nav>
+  {% endif %}
 </div>
 {% endblock %}
