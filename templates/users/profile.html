@@ -69,8 +69,11 @@
                         <i class="far fa-clock me-2 text-muted"></i> {{ booking.booked_at|date:"F d, Y H:i" }}
                       </p>
                       {% if booking.payment %}
-                        <div class="border-top pt-2 mt-2 text-muted small">
-                          <i class="fas fa-receipt me-1"></i> Txn: <code class="text-dark fw-bold">{{ booking.payment.order_id }}</code>
+                        <div class="border-top pt-2 mt-2 d-flex justify-content-between align-items-center text-muted small">
+                          <span><i class="fas fa-receipt me-1"></i> Txn: <code class="text-dark fw-bold">{{ booking.payment.order_id }}</code></span>
+                          <a href="{% url 'download_pdf_ticket' booking.payment.order_id %}" class="btn btn-sm btn-outline-success text-nowrap py-0 px-2" style="font-size: 0.75rem;">
+                            <i class="fas fa-download me-1"></i> Ticket PDF
+                          </a>
                         </div>
                       {% endif %}
                     </div>
@@ -126,7 +129,12 @@
                       </td>
                       <td>
                         {% if txn.status == 'SUCCESS' %}
-                          <span class="badge bg-success"><i class="fas fa-check-circle me-1"></i> SUCCESS</span>
+                          <span class="badge bg-success mb-1"><i class="fas fa-check-circle me-1"></i> SUCCESS</span>
+                          <div>
+                            <a href="{% url 'download_pdf_ticket' txn.order_id %}" class="btn btn-sm btn-outline-primary text-nowrap mt-1" style="font-size: 0.75rem;">
+                              <i class="fas fa-file-pdf me-1"></i> PDF Ticket
+                            </a>
+                          </div>
                         {% elif txn.status == 'PENDING' %}
                           <span class="badge bg-warning text-dark"><i class="fas fa-spinner fa-spin me-1"></i> PENDING</span>
                         {% elif txn.status == 'CANCELLED' %}

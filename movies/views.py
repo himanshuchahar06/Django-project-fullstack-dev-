@@ -27,6 +27,8 @@ from .forms import (
     ReviewForm, ReviewReportForm, MovieForm, GenreForm, 
     LanguageForm, CastMemberForm, TheaterForm
 )
+from .ticket_generator import generate_pdf_ticket
+from .tasks import dispatch_ticket_email_async
 
 def get_personalized_recommendations(request):
     """
@@ -811,6 +813,9 @@ def verify_payment(request, theater_id):
             seat.save(update_fields=['is_booked', 'reserved_by', 'reserved_until'])
             created_bookings.append(seat.seat_number)
 
+    # Asynchronously generate PDF ticket & dispatch email in background
+    dispatch_ticket_email_async(payment.id)
+
     messages.success(request, f"Payment verified! Successfully booked seat(s): {', '.join(created_bookings)}")
     return JsonResponse({
         'success': True,
@@ -819,6 +824,26 @@ def verify_payment(request, theater_id):
         'payment_id': payment_id,
         'message': f"Payment verified! Booked {len(created_bookings)} seat(s)."
     })
+
+@login_required(login_url='/login/')
+def download_pdf_ticket(request, order_id):
+    """
+    Endpoint for users to download their official PDF e-ticket with embedded QR code.
+    Restricted to ticket owners or staff administrators.
+    """
+    txn = get_object_or_404(
+        PaymentTransaction.objects.select_related('movie', 'theater', 'user'),
+        order_id=order_id
+    )
+
+    if txn.user != request.user and not request.user.is_staff:
+        messages.error(request, "Access denied. You do not have permission to download this ticket.")
+        return redirect('/users/profile/')
+
+    pdf_bytes = generate_pdf_ticket(txn)
+    response = HttpResponse(pdf_bytes, content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="BookMySeat_Ticket_{txn.order_id}.pdf"'
+    return response
 
 @login_required(login_url='/login/')
 def handle_payment_failure(request, theater_id):

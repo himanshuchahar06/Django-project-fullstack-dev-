@@ -366,3 +366,60 @@ class MovieDiscoveryTestCase(TestCase):
         rv_movies = list_res.context['recently_viewed_movies']
         self.assertIn(self.movie1, rv_movies)
 
+
+class TicketEmailAndDownloadTestCase(TestCase):
+    def setUp(self):
+        self.client = Client()
+        self.user = User.objects.create_user(username='dave', email='dave@example.com', password='password123')
+        self.client.login(username='dave', password='password123')
+
+        self.movie = Movie.objects.create(name='Avatar Test', rating=8.8, duration_minutes=162)
+        self.theater = Theater.objects.create(
+            name='Screen 1',
+            location='City Center',
+            movie=self.movie,
+            time=timezone.now() + timedelta(days=1),
+            ticket_price=350.00
+        )
+        self.seat = Seat.objects.create(theater=self.theater, seat_number='B5', is_booked=True)
+
+        self.payment = PaymentTransaction.objects.create(
+            user=self.user,
+            order_id='order_ticket_test_123',
+            payment_id='pay_ticket_test_456',
+            amount=350.00,
+            status='SUCCESS',
+            movie=self.movie,
+            theater=self.theater,
+            seats_summary='B5'
+        )
+        self.booking = Booking.objects.create(user=self.user, seat=self.seat, movie=self.movie, theater=self.theater, payment=self.payment)
+
+    def test_generate_pdf_ticket_with_qr_code(self):
+        """Test PDF ticket generation logic returns valid PDF bytes containing header and QR code."""
+        from movies.ticket_generator import generate_pdf_ticket
+        pdf_bytes = generate_pdf_ticket(self.payment)
+        self.assertIsNotNone(pdf_bytes)
+        self.assertTrue(pdf_bytes.startswith(b'%PDF'))
+
+    def test_download_pdf_ticket_view(self):
+        """Test downloading PDF ticket from endpoint returns 200 OK with application/pdf header."""
+        url = f'/movies/transaction/{self.payment.order_id}/ticket/'
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'application/pdf')
+        self.assertIn('attachment; filename="BookMySeat_Ticket_', response['Content-Disposition'])
+
+    def test_send_ticket_email_task(self):
+        """Test asynchronous Celery email task executes cleanly and attaches PDF ticket."""
+        from movies.tasks import send_ticket_email_task
+        from django.core import mail
+
+        result = send_ticket_email_task(self.payment.id)
+        self.assertIn("Email sent to dave@example.com", result)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, ['dave@example.com'])
+        self.assertEqual(len(mail.outbox[0].attachments), 1)
+        self.assertTrue(mail.outbox[0].attachments[0][0].endswith('.pdf'))
+
+

@@ -19,4 +19,5 @@ urlpatterns = [
     path('payment/webhook/', views.payment_webhook, name='payment_webhook'),
     path('admin-dashboard/', views.custom_admin_dashboard, name='custom_admin_dashboard'),
     path('admin-dashboard/export-csv/', views.export_analytics_csv, name='export_analytics_csv'),
+    path('transaction/<str:order_id>/ticket/', views.download_pdf_ticket, name='download_pdf_ticket'),
 ]
