@@ -6,4 +6,8 @@ psycopg2-binary
 razorpay
 sqlparse==0.4.4
 typing_extensions==4.7.0
+reportlab
+qrcode
+pillow
+
 
