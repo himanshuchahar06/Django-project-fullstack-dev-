@@ -18,4 +18,5 @@ urlpatterns = [
     path('theater/<int:theater_id>/payment/failure/', views.handle_payment_failure, name='handle_payment_failure'),
     path('payment/webhook/', views.payment_webhook, name='payment_webhook'),
     path('admin-dashboard/', views.custom_admin_dashboard, name='custom_admin_dashboard'),
+    path('admin-dashboard/export-csv/', views.export_analytics_csv, name='export_analytics_csv'),
 ]

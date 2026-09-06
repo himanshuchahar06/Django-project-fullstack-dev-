@@ -115,6 +115,10 @@ class Theater(models.Model):
 
     class Meta:
         ordering = ['time']
+        indexes = [
+            models.Index(fields=['time']),
+            models.Index(fields=['movie', 'time']),
+        ]
 
     def __str__(self):
         return f'{self.name} - {self.movie.name} at {self.time.strftime("%Y-%m-%d %H:%M") if self.time else ""}'
@@ -125,6 +129,12 @@ class Seat(models.Model):
     is_booked = models.BooleanField(default=False)
     reserved_by = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL, related_name='reserved_seats')
     reserved_until = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['theater', 'is_booked']),
+            models.Index(fields=['reserved_until']),
+        ]
 
     def __str__(self):
         return f'{self.seat_number} in {self.theater.name}'
@@ -195,6 +205,11 @@ class PaymentTransaction(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['created_at']),
+            models.Index(fields=['status', 'created_at']),
+            models.Index(fields=['user', 'created_at']),
+        ]
 
     def __str__(self):
         return f"Txn #{self.order_id} - {self.user.username} ({self.status}) - ₹{self.amount}"
@@ -206,6 +221,15 @@ class Booking(models.Model):
     theater = models.ForeignKey(Theater, on_delete=models.CASCADE)
     payment = models.ForeignKey(PaymentTransaction, null=True, blank=True, on_delete=models.SET_NULL, related_name='bookings')
     booked_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-booked_at']
+        indexes = [
+            models.Index(fields=['booked_at']),
+            models.Index(fields=['movie', 'booked_at']),
+            models.Index(fields=['theater', 'booked_at']),
+            models.Index(fields=['user', 'booked_at']),
+        ]
 
     def __str__(self):
         return f'Booking by {self.user.username} for {self.seat.seat_number} at {self.theater.name}'

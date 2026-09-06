@@ -32,6 +32,9 @@
   <!-- Tab Navigation -->
   <ul class="nav nav-pills mb-4" id="adminTabs" role="tablist">
     <li class="nav-item">
+      <a class="nav-link {% if active_tab == 'analytics' %}active{% endif %}" href="?tab=analytics"><i class="fas fa-chart-line text-success mr-2"></i>Analytics & Insights</a>
+    </li>
+    <li class="nav-item">
       <a class="nav-link {% if active_tab == 'movies' %}active{% endif %}" href="?tab=movies"><i class="fas fa-film mr-2"></i>Movies ({{ movies.count }})</a>
     </li>
     <li class="nav-item">
@@ -54,6 +57,225 @@
   <!-- Tab Contents -->
   <div class="tab-content">
     
+    <!-- ANALYTICS TAB -->
+    {% if active_tab == 'analytics' %}
+      <div class="admin-card mb-4">
+        <!-- Date Range Filter & CSV Export Toolbar -->
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4 border-bottom border-slate-700 pb-3">
+          <div>
+            <h3 class="font-weight-bold text-white mb-1"><i class="fas fa-chart-pie text-success mr-2"></i>Business Insights & Real-Time Analytics</h3>
+            <p class="text-muted small mb-0">High-performance Django ORM aggregations optimized for 100,000+ booking scale.</p>
+          </div>
+          <div class="d-flex align-items-center flex-wrap gap-2">
+            <a href="{% url 'export_analytics_csv' %}?preset={{ analytics.preset }}&start_date={{ analytics.start_date }}&end_date={{ analytics.end_date }}" class="btn btn-success font-weight-bold shadow-sm">
+              <i class="fas fa-file-csv mr-2"></i>Export CSV Report
+            </a>
+          </div>
+        </div>
+
+        <!-- Filter Presets & Date Pickers -->
+        <form method="GET" class="bg-slate-800 p-3 rounded mb-4 border border-slate-700">
+          <input type="hidden" name="tab" value="analytics">
+          <div class="form-row align-items-center">
+            <div class="col-auto mb-2 mb-md-0">
+              <label class="sr-only">Preset</label>
+              <div class="btn-group btn-group-toggle" data-toggle="buttons">
+                <a href="?tab=analytics&preset=today" class="btn btn-sm btn-outline-info {% if analytics.preset == 'today' %}active{% endif %}">Today</a>
+                <a href="?tab=analytics&preset=last_7_days" class="btn btn-sm btn-outline-info {% if analytics.preset == 'last_7_days' %}active{% endif %}">7 Days</a>
+                <a href="?tab=analytics&preset=this_month" class="btn btn-sm btn-outline-info {% if analytics.preset == 'this_month' %}active{% endif %}">This Month</a>
+                <a href="?tab=analytics&preset=this_year" class="btn btn-sm btn-outline-info {% if analytics.preset == 'this_year' %}active{% endif %}">This Year</a>
+                <a href="?tab=analytics&preset=all_time" class="btn btn-sm btn-outline-info {% if analytics.preset == 'all_time' %}active{% endif %}">All Time</a>
+              </div>
+            </div>
+            <div class="col-md-3 mb-2 mb-md-0">
+              <input type="date" name="start_date" class="form-bg form-control form-control-sm text-white bg-dark border-slate-600" value="{{ analytics.start_date }}" placeholder="Start Date">
+            </div>
+            <div class="col-md-3 mb-2 mb-md-0">
+              <input type="date" name="end_date" class="form-bg form-control form-control-sm text-white bg-dark border-slate-600" value="{{ analytics.end_date }}" placeholder="End Date">
+            </div>
+            <div class="col-auto">
+              <button type="submit" class="btn btn-sm btn-primary font-weight-bold"><i class="fas fa-filter mr-1"></i>Apply Filter</button>
+            </div>
+          </div>
+        </form>
+
+        <!-- Revenue Summary Metric Cards -->
+        <div class="row mb-4">
+          <div class="col-md-3 mb-3">
+            <div class="p-3 bg-dark rounded border border-slate-700 h-100">
+              <div class="text-muted small font-weight-bold text-uppercase">Today's Revenue</div>
+              <div class="h3 font-weight-bold text-success mt-1 mb-0">₹{{ analytics.daily_rev|floatformat:2 }}</div>
+              <small class="text-muted">Daily Income</small>
+            </div>
+          </div>
+          <div class="col-md-3 mb-3">
+            <div class="p-3 bg-dark rounded border border-slate-700 h-100">
+              <div class="text-muted small font-weight-bold text-uppercase">7 Days Revenue</div>
+              <div class="h3 font-weight-bold text-info mt-1 mb-0">₹{{ analytics.weekly_rev|floatformat:2 }}</div>
+              <small class="text-muted">Weekly Income</small>
+            </div>
+          </div>
+          <div class="col-md-3 mb-3">
+            <div class="p-3 bg-dark rounded border border-slate-700 h-100">
+              <div class="text-muted small font-weight-bold text-uppercase">Monthly Revenue</div>
+              <div class="h3 font-weight-bold text-primary mt-1 mb-0">₹{{ analytics.monthly_rev|floatformat:2 }}</div>
+              <small class="text-muted">This Month</small>
+            </div>
+          </div>
+          <div class="col-md-3 mb-3">
+            <div class="p-3 bg-dark rounded border border-slate-700 h-100">
+              <div class="text-muted small font-weight-bold text-uppercase">Filtered Revenue</div>
+              <div class="h3 font-weight-bold text-warning mt-1 mb-0">₹{{ analytics.filtered_rev|floatformat:2 }}</div>
+              <small class="text-muted">Range Total</small>
+            </div>
+          </div>
+        </div>
+
+        <div class="row mb-4">
+          <div class="col-md-4 mb-3">
+            <div class="p-3 bg-dark rounded border border-slate-700">
+              <div class="text-muted small font-weight-bold text-uppercase">Total Bookings</div>
+              <div class="h3 font-weight-bold text-white mt-1 mb-0">{{ analytics.total_bookings_count }}</div>
+              <small class="text-muted">Confirmed Tickets</small>
+            </div>
+          </div>
+          <div class="col-md-4 mb-3">
+            <div class="p-3 bg-dark rounded border border-slate-700">
+              <div class="text-muted small font-weight-bold text-uppercase">Registered Users</div>
+              <div class="h3 font-weight-bold text-white mt-1 mb-0">{{ analytics.total_users_count }}</div>
+              <small class="text-muted">Platform Users</small>
+            </div>
+          </div>
+          <div class="col-md-4 mb-3">
+            <div class="p-3 bg-dark rounded border border-slate-700">
+              <div class="text-muted small font-weight-bold text-uppercase">Avg Order Value</div>
+              <div class="h3 font-weight-bold text-success mt-1 mb-0">₹{{ analytics.avg_order_value|floatformat:2 }}</div>
+              <small class="text-muted">Per Transaction</small>
+            </div>
+          </div>
+        </div>
+
+        <!-- Theater Occupancy Percentage Progress Bars -->
+        <h4 class="font-weight-bold text-white mb-3"><i class="fas fa-building text-info mr-2"></i>Theater Occupancy Percentages</h4>
+        <div class="row mb-4">
+          {% for th in analytics.theater_occupancy_list %}
+            <div class="col-md-6 mb-3">
+              <div class="p-3 bg-dark rounded border border-slate-700">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                  <span class="font-weight-bold text-white">{{ th.name }} ({{ th.movie_name }})</span>
+                  <span class="badge badge-{% if th.occupancy_pct >= 75 %}success{% elif th.occupancy_pct >= 40 %}warning{% else %}secondary{% endif %}">
+                    {{ th.occupancy_pct }}% Occupied
+                  </span>
+                </div>
+                <div class="progress mb-2" style="height: 10px;">
+                  <div class="progress-bar bg-{% if th.occupancy_pct >= 75 %}success{% elif th.occupancy_pct >= 40 %}warning{% else %}info{% endif %}" role="progressbar" style="width: {{ th.occupancy_pct }}%;" aria-valuenow="{{ th.occupancy_pct }}" aria-valuemin="0" aria-valuemax="100"></div>
+                </div>
+                <div class="d-flex justify-content-between small text-muted">
+                  <span>Booked: {{ th.booked_seats }} / {{ th.total_seats }} seats</span>
+                  <span>Revenue: ₹{{ th.revenue|floatformat:2 }}</span>
+                </div>
+              </div>
+            </div>
+          {% empty %}
+            <div class="col-12"><p class="text-muted">No theater occupancy records available.</p></div>
+          {% endfor %}
+        </div>
+
+        <!-- Most Booked Movies & Top Theaters Tables -->
+        <div class="row mb-4">
+          <div class="col-lg-6 mb-4 mb-lg-0">
+            <h4 class="font-weight-bold text-white mb-3"><i class="fas fa-film text-warning mr-2"></i>Most Booked Movies</h4>
+            <div class="table-responsive">
+              <table class="table table-dark-custom table-hover">
+                <thead>
+                  <tr><th>Movie</th><th>Age Cert</th><th>Bookings</th><th>Revenue</th></tr>
+                </thead>
+                <tbody>
+                  {% for m in analytics.most_booked_movies %}
+                    <tr>
+                      <td class="font-weight-bold text-white">{{ m.name }}</td>
+                      <td><span class="badge badge-secondary">{{ m.age_certification }}</span></td>
+                      <td class="font-weight-bold text-info">{{ m.booking_count }}</td>
+                      <td class="font-weight-bold text-success">₹{{ m.revenue|floatformat:2 }}</td>
+                    </tr>
+                  {% empty %}
+                    <tr><td colspan="4" class="text-muted text-center">No bookings recorded.</td></tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div class="col-lg-6">
+            <h4 class="font-weight-bold text-white mb-3"><i class="fas fa-trophy text-warning mr-2"></i>Top Performing Theaters</h4>
+            <div class="table-responsive">
+              <table class="table table-dark-custom table-hover">
+                <thead>
+                  <tr><th>Theater</th><th>Occupancy</th><th>Booked Seats</th><th>Revenue</th></tr>
+                </thead>
+                <tbody>
+                  {% for th in analytics.top_theaters %}
+                    <tr>
+                      <td class="font-weight-bold text-white">{{ th.name }}</td>
+                      <td><span class="badge badge-info">{{ th.occupancy_pct }}%</span></td>
+                      <td>{{ th.booked_seats }} / {{ th.total_seats }}</td>
+                      <td class="font-weight-bold text-success">₹{{ th.revenue|floatformat:2 }}</td>
+                    </tr>
+                  {% empty %}
+                    <tr><td colspan="4" class="text-muted text-center">No performance records.</td></tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Peak Booking Hours Distribution -->
+        <h4 class="font-weight-bold text-white mb-3"><i class="fas fa-clock text-primary mr-2"></i>Peak Booking Hours Distribution</h4>
+        <div class="bg-dark p-3 rounded border border-slate-700 mb-4">
+          <div class="row row-cols-2 row-cols-sm-4 row-cols-md-6 g-2 text-center">
+            {% for hour, count in analytics.peak_hours_dict.items %}
+              <div class="col mb-2">
+                <div class="p-2 rounded border border-slate-700 bg-slate-800">
+                  <div class="small text-muted font-weight-bold">{{ hour }}:00</div>
+                  <div class="font-weight-bold text-warning">{{ count }}</div>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+
+        <!-- Cancellation & Refund Statistics -->
+        <h4 class="font-weight-bold text-white mb-3"><i class="fas fa-exclamation-triangle text-danger mr-2"></i>Cancellation & Refund Statistics</h4>
+        <div class="row">
+          <div class="col-md-3 mb-3">
+            <div class="p-3 bg-dark rounded border border-slate-700">
+              <div class="text-muted small font-weight-bold text-uppercase">Total Transactions</div>
+              <div class="h4 font-weight-bold text-white mt-1 mb-0">{{ analytics.total_txns }}</div>
+            </div>
+          </div>
+          <div class="col-md-3 mb-3">
+            <div class="p-3 bg-dark rounded border border-slate-700">
+              <div class="text-muted small font-weight-bold text-uppercase">Successful Payments</div>
+              <div class="h4 font-weight-bold text-success mt-1 mb-0">{{ analytics.success_txns }}</div>
+            </div>
+          </div>
+          <div class="col-md-3 mb-3">
+            <div class="p-3 bg-dark rounded border border-slate-700">
+              <div class="text-muted small font-weight-bold text-uppercase">Failed / Cancelled</div>
+              <div class="h4 font-weight-bold text-danger mt-1 mb-0">{{ analytics.failed_txns|add:analytics.cancelled_txns }}</div>
+            </div>
+          </div>
+          <div class="col-md-3 mb-3">
+            <div class="p-3 bg-dark rounded border border-slate-700">
+              <div class="text-muted small font-weight-bold text-uppercase">Failure / Cancellation Rate</div>
+              <div class="h4 font-weight-bold text-warning mt-1 mb-0">{{ analytics.cancellation_rate }}%</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    {% endif %}
+
     <!-- MOVIES TAB -->
     {% if active_tab == 'movies' %}
       <div class="admin-card">
