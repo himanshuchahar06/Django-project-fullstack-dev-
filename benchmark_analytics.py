@@ -16,13 +16,25 @@ from movies.views import get_admin_analytics_data
 
 def ensure_admin_user():
     """Ensure administrator credentials exist for report & admin testing."""
-    admin_user, created = User.objects.get_or_create(username='admin', defaults={'email': 'admin@bookmyseat.com'})
-    admin_user.is_staff = True
-    admin_user.is_superuser = True
-    admin_user.set_password('Admin@123')
-    admin_user.save()
-    status = "Created new" if created else "Updated existing"
-    print(f"[ADMIN CREDENTIALS] {status} superuser: Username='admin', Password='Admin@123'")
+    # Check if old 'admin' user exists and rename/update, or get/create 'Himanshu'
+    old_admin = User.objects.filter(username='admin').first()
+    if old_admin:
+        old_admin.username = 'Himanshu'
+        old_admin.email = 'himanshu@bookmyseat.com'
+        old_admin.is_staff = True
+        old_admin.is_superuser = True
+        old_admin.set_password('Himanshu@1')
+        old_admin.save()
+        admin_user = old_admin
+        status = "Updated existing superuser 'admin' to 'Himanshu'"
+    else:
+        admin_user, created = User.objects.get_or_create(username='Himanshu', defaults={'email': 'himanshu@bookmyseat.com'})
+        admin_user.is_staff = True
+        admin_user.is_superuser = True
+        admin_user.set_password('Himanshu@1')
+        admin_user.save()
+        status = "Created new" if created else "Updated existing"
+    print(f"[ADMIN CREDENTIALS] {status}: Username='Himanshu', Password='Himanshu@1'")
     return admin_user
 
 def run_performance_benchmark():
