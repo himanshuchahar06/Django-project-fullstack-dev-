@@ -25,16 +25,13 @@ SECRET_KEY = 'django-insecure-c8aetlj(=vp90n@#yoc^&d(_6ivp(d!bv-4f!r$lawptjzrwu'
 DEBUG = True
 
 ALLOWED_HOSTS = [
-    'django-project-fullstack-dev.vercel.app',
-    'django-project-fullstack-dev-ws4u.vercel.app',
-
-    # Allow Vercel deployment URLs
+    '*',
     '.vercel.app',
-
     '127.0.0.1',
     'localhost',
 ]
 CSRF_TRUSTED_ORIGINS = [
+    'https://*.vercel.app',
     'https://django-project-fullstack-dev.vercel.app',
     'https://django-project-fullstack-dev-ws4u.vercel.app',
     'http://127.0.0.1:8000',
