@@ -10,7 +10,7 @@
   .hero-backdrop {
     position: relative;
     background: linear-gradient(to bottom, rgba(15, 23, 42, 0.6), #0f172a), 
-                url('{% if movie.image %}{{ movie.image.url }}{% endif %}') center/cover no-repeat;
+                url('{% if movie.image_url %}{{ movie.image_url }}{% endif %}') center/cover no-repeat;
     border-radius: 16px;
     padding: 40px 24px;
     margin-bottom: 30px;
@@ -185,8 +185,8 @@
   <div class="hero-backdrop">
     <div class="row align-items-center">
       <div class="col-md-4 mb-4 mb-md-0 text-center">
-        {% if movie.image %}
-          <img src="{{ movie.image.url }}" alt="{{ movie.name }}" class="poster-img">
+        {% if movie.image_url %}
+          <img src="{{ movie.image_url }}" alt="{{ movie.name }}" class="poster-img">
         {% else %}
           <div class="poster-img d-flex align-items-center justify-content-center bg-secondary" style="height: 380px;">
             <i class="fas fa-film fa-4x text-light"></i>
@@ -273,7 +273,7 @@
       <div class="row">
         {% for poster in movie.additional_posters.all %}
           <div class="col-md-3 col-6 mb-3">
-            <img src="{{ poster.image.url }}" alt="Gallery Poster" class="img-fluid rounded border border-secondary shadow-sm" style="height: 200px; width: 100%; object-fit: cover;">
+            <img src="{% if poster.poster_url %}{{ poster.poster_url }}{% else %}{{ poster.image.url }}{% endif %}" alt="Gallery Poster" class="img-fluid rounded border border-secondary shadow-sm" style="height: 200px; width: 100%; object-fit: cover;">
           </div>
         {% endfor %}
       </div>
@@ -485,8 +485,8 @@
           <div class="col-md-2 col-sm-4 col-6 mb-4">
             <a href="{% url 'movie_detail' sim_movie.id %}" class="text-decoration-none">
               <div class="movie-mini-card">
-                {% if sim_movie.image %}
-                  <img src="{{ sim_movie.image.url }}" alt="{{ sim_movie.name }}" class="card-img-top" style="height: 220px; object-fit: cover;">
+                {% if sim_movie.image_url %}
+                  <img src="{{ sim_movie.image_url }}" alt="{{ sim_movie.name }}" class="card-img-top" style="height: 220px; object-fit: cover;">
                 {% else %}
                   <div class="bg-secondary d-flex align-items-center justify-content-center text-white" style="height: 220px;">
                     <i class="fas fa-film fa-2x"></i>
@@ -513,8 +513,8 @@
           <div class="col-md-2 col-sm-4 col-6 mb-4">
             <a href="{% url 'movie_detail' trend_movie.id %}" class="text-decoration-none">
               <div class="movie-mini-card">
-                {% if trend_movie.image %}
-                  <img src="{{ trend_movie.image.url }}" alt="{{ trend_movie.name }}" class="card-img-top" style="height: 220px; object-fit: cover;">
+                {% if trend_movie.image_url %}
+                  <img src="{{ trend_movie.image_url }}" alt="{{ trend_movie.name }}" class="card-img-top" style="height: 220px; object-fit: cover;">
                 {% else %}
                   <div class="bg-secondary d-flex align-items-center justify-content-center text-white" style="height: 220px;">
                     <i class="fas fa-film fa-2x"></i>
@@ -541,8 +541,8 @@
           <div class="col-md-2 col-sm-4 col-6 mb-4">
             <a href="{% url 'movie_detail' rec_movie.id %}" class="text-decoration-none">
               <div class="movie-mini-card">
-                {% if rec_movie.image %}
-                  <img src="{{ rec_movie.image.url }}" alt="{{ rec_movie.name }}" class="card-img-top" style="height: 220px; object-fit: cover;">
+                {% if rec_movie.image_url %}
+                  <img src="{{ rec_movie.image_url }}" alt="{{ rec_movie.name }}" class="card-img-top" style="height: 220px; object-fit: cover;">
                 {% else %}
                   <div class="bg-secondary d-flex align-items-center justify-content-center text-white" style="height: 220px;">
                     <i class="fas fa-film fa-2x"></i>

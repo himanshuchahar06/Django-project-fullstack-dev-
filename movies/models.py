@@ -74,6 +74,18 @@ class Movie(models.Model):
         return self.name
 
     @property
+    def image_url(self):
+        if not self.image:
+            return None
+        val = str(self.image).strip()
+        if val.startswith('http://') or val.startswith('https://'):
+            return val
+        try:
+            return self.image.url
+        except Exception:
+            return None
+
+    @property
     def youtube_embed_url(self):
         if not self.trailer_youtube_url:
             return None
@@ -108,6 +120,18 @@ class MoviePoster(models.Model):
     movie = models.ForeignKey(Movie, on_delete=models.CASCADE, related_name='additional_posters')
     image = models.ImageField(upload_to="movies/posters/")
     caption = models.CharField(max_length=255, blank=True, null=True)
+
+    @property
+    def poster_url(self):
+        if not self.image:
+            return None
+        val = str(self.image).strip()
+        if val.startswith('http://') or val.startswith('https://'):
+            return val
+        try:
+            return self.image.url
+        except Exception:
+            return None
 
     def __str__(self):
         return f"Poster for {self.movie.name}"
