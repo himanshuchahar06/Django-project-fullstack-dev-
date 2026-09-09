@@ -27,15 +27,21 @@ DEBUG = os.environ.get("DEBUG", "False").lower() == "true"
 
 
 ALLOWED_HOSTS = [
+    "*",
     "localhost",
     "127.0.0.1",
     ".vercel.app",
 ]
 
-
 CSRF_TRUSTED_ORIGINS = [
     "https://*.vercel.app",
+    "https://*.now.sh",
+    "https://django-project-fullstack-dev.vercel.app",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
 ]
+
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 
 # --------------------------------------------------
@@ -140,14 +146,14 @@ WSGI_APPLICATION = "bookmyseat.wsgi.application"
 # DATABASE
 # --------------------------------------------------
 
-DATABASE_URL = os.environ.get("DATABASE_URL")
+postgres_url = 'postgresql://djnago_bookmyshow_35v7_user:QK20xv9zpiUWLREfpCQ6khmt6AFaOlcU@dpg-da5ltqijobas73f5fla0-a.oregon-postgres.render.com/djnago_bookmyshow_35v7'
+DATABASE_URL = os.environ.get("DATABASE_URL") or os.environ.get("POSTGRES_URL") or (postgres_url if os.environ.get("VERCEL") or os.environ.get("USE_POSTGRES") else None)
 
 if DATABASE_URL:
     DATABASES = {
         "default": dj_database_url.parse(
             DATABASE_URL,
             conn_max_age=600,
-            conn_health_checks=True,
         )
     }
 else:
