@@ -146,8 +146,7 @@ WSGI_APPLICATION = "bookmyseat.wsgi.application"
 # DATABASE
 # --------------------------------------------------
 
-postgres_url = 'postgresql://djnago_bookmyshow_35v7_user:QK20xv9zpiUWLREfpCQ6khmt6AFaOlcU@dpg-da5ltqijobas73f5fla0-a.oregon-postgres.render.com/djnago_bookmyshow_35v7'
-DATABASE_URL = os.environ.get("DATABASE_URL") or os.environ.get("POSTGRES_URL") or (postgres_url if os.environ.get("VERCEL") or os.environ.get("USE_POSTGRES") else None)
+DATABASE_URL = os.environ.get("DATABASE_URL") or os.environ.get("POSTGRES_URL")
 
 if DATABASE_URL:
     DATABASES = {
@@ -207,7 +206,7 @@ STATIC_URL = "/static/"
 STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
 
 STATICFILES_STORAGE = (
-    "whitenoise.storage.CompressedManifestStaticFilesStorage"
+    "whitenoise.storage.CompressedStaticFilesStorage"
 )
 
 
