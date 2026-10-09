@@ -2,7 +2,10 @@
   "builds": [
     {
       "src": "bookmyseat/wsgi.py",
-      "use": "@vercel/python"
+      "use": "@vercel/python",
+      "config": {
+        "includeFiles": ["db.sqlite3", "media/**"]
+      }
     }
   ],
   "routes": [
