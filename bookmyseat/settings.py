@@ -148,11 +148,33 @@ WSGI_APPLICATION = "bookmyseat.wsgi.application"
 
 DATABASE_URL = os.environ.get("DATABASE_URL") or os.environ.get("POSTGRES_URL")
 
-if DATABASE_URL:
+def is_postgres_reachable(url):
+    if not url:
+        return False
+    # If it is the known expired Render database, skip it immediately to avoid SSL crash
+    if "dpg-da5ltqijobas73f5fla0-a" in url:
+        return False
+    try:
+        import psycopg2
+        cfg = dj_database_url.parse(url)
+        conn = psycopg2.connect(
+            dbname=cfg.get('NAME'),
+            user=cfg.get('USER'),
+            password=cfg.get('PASSWORD'),
+            host=cfg.get('HOST'),
+            port=cfg.get('PORT') or 5432,
+            connect_timeout=2
+        )
+        conn.close()
+        return True
+    except Exception:
+        return False
+
+if DATABASE_URL and is_postgres_reachable(DATABASE_URL):
     DATABASES = {
         "default": dj_database_url.parse(
             DATABASE_URL,
-            conn_max_age=600,
+            conn_max_age=0,
         )
     }
 else:
