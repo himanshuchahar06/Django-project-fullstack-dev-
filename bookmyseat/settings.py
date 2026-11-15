@@ -1,3 +1,4 @@
+
 """
 Django settings for bookmyseat project.
 """
@@ -23,7 +24,10 @@ SECRET_KEY = os.environ.get(
     "django-insecure-change-this-for-local-development"
 )
 
-DEBUG = True
+DEBUG = os.environ.get(
+    "DEBUG",
+    "False" if os.environ.get("VERCEL") else "True"
+).lower() == "true"
 
 
 ALLOWED_HOSTS = [
@@ -146,38 +150,33 @@ WSGI_APPLICATION = "bookmyseat.wsgi.application"
 # DATABASE
 # --------------------------------------------------
 
-DATABASE_URL = os.environ.get("DATABASE_URL") or os.environ.get("POSTGRES_URL")
+DATABASE_URL = (
+    os.environ.get("DATABASE_URL")
+    or os.environ.get("POSTGRES_URL")
+)
 
-def is_postgres_reachable(url):
-    if not url:
-        return False
-    # If it is the known expired Render database, skip it immediately to avoid SSL crash
-    if "dpg-da5ltqijobas73f5fla0-a" in url:
-        return False
-    try:
-        import psycopg2
-        cfg = dj_database_url.parse(url)
-        conn = psycopg2.connect(
-            dbname=cfg.get('NAME'),
-            user=cfg.get('USER'),
-            password=cfg.get('PASSWORD'),
-            host=cfg.get('HOST'),
-            port=cfg.get('PORT') or 5432,
-            connect_timeout=2
-        )
-        conn.close()
-        return True
-    except Exception:
-        return False
+if DATABASE_URL:
 
-if DATABASE_URL and is_postgres_reachable(DATABASE_URL):
+    # PostgreSQL for production
     DATABASES = {
         "default": dj_database_url.parse(
             DATABASE_URL,
             conn_max_age=0,
+            ssl_require=True,
         )
     }
+
+elif os.environ.get("VERCEL"):
+
+    # Never use SQLite as a production fallback on Vercel
+    raise RuntimeError(
+        "DATABASE_URL is missing. "
+        "Configure PostgreSQL in Vercel Environment Variables."
+    )
+
 else:
+
+    # SQLite for local development
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
@@ -230,15 +229,6 @@ STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
 STATICFILES_STORAGE = (
     "whitenoise.storage.CompressedStaticFilesStorage"
 )
-
-
-# --------------------------------------------------
-# MEDIA FILES
-# --------------------------------------------------
-
-MEDIA_URL = "/media/"
-
-MEDIA_ROOT = os.path.join(BASE_DIR, "media")
 
 
 # --------------------------------------------------
