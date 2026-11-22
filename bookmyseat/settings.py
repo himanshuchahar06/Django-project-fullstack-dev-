@@ -171,7 +171,7 @@ def is_postgres_reachable(url):
     if not url:
         return False
     # If it is the known expired Render database, skip it to prevent SSL connection crashes
-    if "dpg-da5ltqijobas73f5fla0-a" in url:
+    if "dpg-da5ltqijobas73f5fla0-a" in url or "render.com" in url:
         return False
     try:
         import psycopg2
@@ -206,7 +206,7 @@ else:
                 shutil.copy2(bundled_db, tmp_db)
             except Exception:
                 pass
-        sqlite_name = tmp_db if os.path.exists(tmp_db) else bundled_db
+        sqlite_name = tmp_db
     else:
         sqlite_name = BASE_DIR / "db.sqlite3"
 

@@ -73,8 +73,8 @@
         <div class="col-md-3 col-sm-6">
           <a href="{% url 'movie_detail' movie.id %}" class="text-decoration-none">
             <div class="card-home h-100">
-              {% if movie.image %}
-                <img src="{{ movie.image.url }}" class="card-img-top" alt="{{ movie.name }}" height="280" style="object-fit: cover;" />
+              {% if movie.image_url %}
+                <img src="{{ movie.image_url }}" class="card-img-top" alt="{{ movie.name }}" height="280" style="object-fit: cover;" />
               {% else %}
                 <div class="bg-secondary d-flex align-items-center justify-content-center text-white" height="280">
                   <i class="fas fa-film fa-3x"></i>
