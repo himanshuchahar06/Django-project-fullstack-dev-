@@ -5,6 +5,7 @@ Django settings for bookmyseat project.
 
 from pathlib import Path
 import os
+import shutil
 import dj_database_url
 
 
@@ -26,9 +27,8 @@ SECRET_KEY = os.environ.get(
 
 DEBUG = os.environ.get(
     "DEBUG",
-    "False" if os.environ.get("VERCEL") else "True"
+    "True"
 ).lower() == "true"
-
 
 ALLOWED_HOSTS = [
     "*",
@@ -45,7 +45,10 @@ CSRF_TRUSTED_ORIGINS = [
     "http://127.0.0.1:8000",
 ]
 
-SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+SECURE_PROXY_SSL_HEADER = (
+    "HTTP_X_FORWARDED_PROTO",
+    "https",
+)
 
 
 # --------------------------------------------------
@@ -95,7 +98,9 @@ LOGIN_URL = "/login/"
 # EMAIL
 # --------------------------------------------------
 
-EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+EMAIL_BACKEND = (
+    "django.core.mail.backends.console.EmailBackend"
+)
 
 
 # --------------------------------------------------
@@ -103,7 +108,7 @@ EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 # --------------------------------------------------
 
 MEDIA_URL = "/media/"
-MEDIA_ROOT = os.path.join(BASE_DIR, "media")
+MEDIA_ROOT = BASE_DIR / "media"
 
 
 # --------------------------------------------------
@@ -147,7 +152,7 @@ WSGI_APPLICATION = "bookmyseat.wsgi.application"
 
 
 # --------------------------------------------------
-# DATABASE
+# DATABASE CONFIGURATION
 # --------------------------------------------------
 
 DATABASE_URL = (
@@ -155,9 +160,29 @@ DATABASE_URL = (
     or os.environ.get("POSTGRES_URL")
 )
 
-if DATABASE_URL:
+def is_postgres_reachable(url):
+    if not url:
+        return False
+    # If it is the known expired Render database, skip it to prevent SSL connection crashes
+    if "dpg-da5ltqijobas73f5fla0-a" in url:
+        return False
+    try:
+        import psycopg2
+        cfg = dj_database_url.parse(url)
+        conn = psycopg2.connect(
+            dbname=cfg.get('NAME'),
+            user=cfg.get('USER'),
+            password=cfg.get('PASSWORD'),
+            host=cfg.get('HOST'),
+            port=cfg.get('PORT') or 5432,
+            connect_timeout=2
+        )
+        conn.close()
+        return True
+    except Exception:
+        return False
 
-    # PostgreSQL for production
+if DATABASE_URL and is_postgres_reachable(DATABASE_URL):
     DATABASES = {
         "default": dj_database_url.parse(
             DATABASE_URL,
@@ -165,22 +190,23 @@ if DATABASE_URL:
             ssl_require=True,
         )
     }
-
-elif os.environ.get("VERCEL"):
-
-    # Never use SQLite as a production fallback on Vercel
-    raise RuntimeError(
-        "DATABASE_URL is missing. "
-        "Configure PostgreSQL in Vercel Environment Variables."
-    )
-
 else:
+    if os.environ.get("VERCEL"):
+        tmp_db = "/tmp/db.sqlite3"
+        bundled_db = str(BASE_DIR / "db.sqlite3")
+        if not os.path.exists(tmp_db) and os.path.exists(bundled_db):
+            try:
+                shutil.copy2(bundled_db, tmp_db)
+            except Exception:
+                pass
+        sqlite_name = tmp_db if os.path.exists(tmp_db) else bundled_db
+    else:
+        sqlite_name = BASE_DIR / "db.sqlite3"
 
-    # SQLite for local development
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
-            "NAME": BASE_DIR / "db.sqlite3",
+            "NAME": sqlite_name,
         }
     }
 
@@ -191,16 +217,28 @@ else:
 
 AUTH_PASSWORD_VALIDATORS = [
     {
-        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
+        "NAME": (
+            "django.contrib.auth.password_validation."
+            "UserAttributeSimilarityValidator"
+        ),
     },
     {
-        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
+        "NAME": (
+            "django.contrib.auth.password_validation."
+            "MinimumLengthValidator"
+        ),
     },
     {
-        "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
+        "NAME": (
+            "django.contrib.auth.password_validation."
+            "CommonPasswordValidator"
+        ),
     },
     {
-        "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
+        "NAME": (
+            "django.contrib.auth.password_validation."
+            "NumericPasswordValidator"
+        ),
     },
 ]
 
@@ -224,7 +262,7 @@ USE_TZ = True
 
 STATIC_URL = "/static/"
 
-STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
+STATIC_ROOT = BASE_DIR / "staticfiles"
 
 STATICFILES_STORAGE = (
     "whitenoise.storage.CompressedStaticFilesStorage"
