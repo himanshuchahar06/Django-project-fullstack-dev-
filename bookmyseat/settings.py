@@ -74,8 +74,15 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
-    "whitenoise.middleware.WhiteNoiseMiddleware",
+]
 
+try:
+    import whitenoise
+    MIDDLEWARE.append("whitenoise.middleware.WhiteNoiseMiddleware")
+except ImportError:
+    pass
+
+MIDDLEWARE += [
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -264,9 +271,13 @@ STATIC_URL = "/static/"
 
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
-STATICFILES_STORAGE = (
-    "whitenoise.storage.CompressedStaticFilesStorage"
-)
+try:
+    import whitenoise
+    STATICFILES_STORAGE = (
+        "whitenoise.storage.CompressedStaticFilesStorage"
+    )
+except ImportError:
+    pass
 
 
 # --------------------------------------------------
